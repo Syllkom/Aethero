@@ -24,25 +24,25 @@ export default {
         },]
 
         async function sendAlbum(jid, mediaList) {
-            const imageCount = mediaList.filter(item => item.image).length;
-            const videoCount = mediaList.filter(item => item.video).length;
+            const imageCount = mediaList.filter(item => item.image).length
+            const videoCount = mediaList.filter(item => item.video).length
             const album = await generateWAMessageFromContent(jid, {
                 albumMessage: {
                     expectedImageCount: imageCount,
                     expectedVideoCount: videoCount,
                     contextInfo: {}
                 }
-            }, { userJid: sock.user.id });
+            }, { userJid: sock.user.id })
             await sock.relayMessage(jid, album.message,
-                { messageId: album.key.id });
+                { messageId: album.key.id })
             for (let i = 0; i < mediaList.length; i++) {
-                const item = mediaList[i];
-                if (!item.image && !item.video) continue;
+                const item = mediaList[i]
+                if (!item.image && !item.video) continue
                 const a0 = item.image ? 'image' : 'video'
                 const prepared = await prepareWAMessageMedia(
-                    { [a0]: item[a0] }, { upload: sock.waUploadToServer });
-                const mediaType = item.image ? 'imageMessage' : 'videoMessage';
-                if (item.caption) prepared[mediaType].caption = item.caption;
+                    { [a0]: item[a0] }, { upload: sock.waUploadToServer })
+                const mediaType = item.image ? 'imageMessage' : 'videoMessage'
+                if (item.caption) prepared[mediaType].caption = item.caption
                 const container = await generateWAMessageFromContent(jid, {
                     [mediaType]: prepared[mediaType],
                     messageContextInfo: {
@@ -51,12 +51,12 @@ export default {
                             parentMessageKey: album.key
                         }
                     }
-                }, { userJid: sock.user.id });
+                }, { userJid: sock.user.id })
                 await sock.relayMessage(jid, container.message,
-                    { messageId: container.key.id });
+                    { messageId: container.key.id })
             }
         }
 
-        await sendAlbum(m.chat.id, media);
+        await sendAlbum(m.chat.id, media)
     }
 }

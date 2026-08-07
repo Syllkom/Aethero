@@ -1,62 +1,62 @@
 export class PathTree {
     constructor() {
-        this.map = new Map();
+        this.map = new Map()
     }
 
     mapS(path, key) {
         if (!this.map.has(path)) {
-            this.map.set(path, new Set());
-        } else this.map.get(path).add(key);
+            this.map.set(path, new Set())
+        } else this.map.get(path).add(key)
     }
 
     mapD(path, key) {
-        const set = this.map.get(path);
+        const set = this.map.get(path)
         if (!set) return false
-        set.delete(key);
+        set.delete(key)
         if (set.size === 0) {
-            this.map.delete(path);
+            this.map.delete(path)
         }
     }
 
     pathSteps(array) {
-        const result = [];
+        const result = []
         for (let i = 0; i < array.length; i++) {
-            const a0 = array.slice(0, i + 1).join('/');
-            const a1 = (i + 1 < array.length) ? array[i + 1] : 0;
-            result.push([a0, a1]);
-        } return result;
+            const a0 = array.slice(0, i + 1).join('/')
+            const a1 = (i + 1 < array.length) ? array[i + 1] : 0
+            result.push([a0, a1])
+        } return result
     }
 
     create(array) {
-        if (!array || array.length === 0) return;
-        const steps = this.pathSteps(array);
+        if (!array || array.length === 0) return
+        const steps = this.pathSteps(array)
         for (let [path, key] of steps) {
-            if (key !== 0) this.mapS(path, key);
-            else this.map.set(path, 1);
+            if (key !== 0) this.mapS(path, key)
+            else this.map.set(path, 1)
         } return true
     }
 
     delete(array) {
-        if (!array || array.length === 0) return;
-        const steps = this.pathSteps(array);
-        const fullPath = steps[steps.length - 1][0], toDelete = [];
+        if (!array || array.length === 0) return
+        const steps = this.pathSteps(array)
+        const fullPath = steps[steps.length - 1][0], toDelete = []
         for (const key of this.map.keys()) if (key === fullPath
-            || key.startsWith(fullPath + '/')) toDelete.push(key);
+            || key.startsWith(fullPath + '/')) toDelete.push(key)
         for (const key of toDelete) this.map.delete(key);
         for (let i = steps.length - 2; i >= 0; i--) {
-            const [path, key] = steps[i];
+            const [path, key] = steps[i]
             if (key === 0) continue
-            if (!this.map.has(path)) continue;
-            this.mapD(path, key);
-        } return true;
+            if (!this.map.has(path)) continue
+            this.mapD(path, key)
+        } return true
     }
 
     inspect() {
-        const result = {};
+        const result = {}
         for (const [path, value] of this.map) {
             result[path] = value instanceof Set
-                ? Array.from(value) : value;
-        } return result;
+                ? Array.from(value) : value
+        } return result
     }
 }
 
@@ -74,66 +74,66 @@ export class pathStore {
 
     splitPath(path) {
         const array = path.split(
-            /[/\\]+/).filter(Boolean);
-        return array;
+            /[/\\]+/).filter(Boolean)
+        return array
     }
 
     has(path) {
-        if (typeof path !== 'string') return false;
-        const parts = this.splitPath(path);
-        if (!parts.length) return false;
-        const fullPath = parts.join('/');
-        return this.pathReg.map.has(fullPath);
+        if (typeof path !== 'string') return false
+        const parts = this.splitPath(path)
+        if (!parts.length) return false
+        const fullPath = parts.join('/')
+        return this.pathReg.map.has(fullPath)
     }
 
     set(path) {
-        if (typeof path !== 'string') return;
-        const parts = this.splitPath(path);
-        if (!parts?.length) return undefined;
+        if (typeof path !== 'string') return
+        const parts = this.splitPath(path)
+        if (!parts?.length) return undefined
         return this.pathReg.create(parts)
     }
 
     get(path) {
-        if (typeof path !== 'string') return;
-        const parts = this.splitPath(path);
-        if (!parts.length) return undefined;
-        const fullPath = parts.join('/');
-        const entry = this.pathReg.map.get(fullPath);
-        if (entry === undefined) return undefined;
+        if (typeof path !== 'string') return
+        const parts = this.splitPath(path)
+        if (!parts.length) return undefined
+        const fullPath = parts.join('/')
+        const entry = this.pathReg.map.get(fullPath)
+        if (entry === undefined) return undefined
         if (entry instanceof Set) {
-            return Array.from(entry);
-        } else return entry;
+            return Array.from(entry)
+        } else return entry
     }
 
     delete(path) {
-        if (typeof path !== 'string') return;
-        const parts = this.splitPath(path);
-        if (!parts?.length) return undefined;
+        if (typeof path !== 'string') return
+        const parts = this.splitPath(path)
+        if (!parts?.length) return undefined
         return this.pathReg.delete(parts)
     }
 
     isLeaf(path) {
-        if (typeof path !== 'string') return false;
-        const parts = this.splitPath(path);
-        if (!parts.length) return false;
-        const fullPath = parts.join('/');
-        const entry = this.pathReg.map.get(fullPath);
+        if (typeof path !== 'string') return false
+        const parts = this.splitPath(path)
+        if (!parts.length) return false
+        const fullPath = parts.join('/')
+        const entry = this.pathReg.map.get(fullPath)
         return entry !== undefined
-            && !(entry instanceof Set);
+            && !(entry instanceof Set)
     }
 
     forEach(callback) {
-        if (typeof callback !== 'function') return;
+        if (typeof callback !== 'function') return
         for (const [path, value] of this.pathReg.map) {
-            callback(value, path, this.pathReg.map);
+            callback(value, path, this.pathReg.map)
         }
     }
 
     toObject() {
-        const result = {};
+        const result = {}
         for (const [path, value] of this.pathReg.map) {
             result[path] = value instanceof Set
-                ? Array.from(value) : value;
-        }; return result;
+                ? Array.from(value) : value
+        }; return result
     }
 }

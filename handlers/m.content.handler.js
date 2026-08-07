@@ -2,12 +2,12 @@ export default {
     enabled: true,
     priority: 0.02,
     script: async function ({ sock }) {
-        if (!this.messageData) return;
-        const m = this;
+        if (!this.messageData) return
+        const m = this
 
         const MEDIA_TYPES = new Set([
-            'imageMessage', 'videoMessage', 'audioMessage', 'documentMessage']);
-        const isMediaType = (type) => MEDIA_TYPES.has(type) ? true : undefined;
+            'imageMessage', 'videoMessage', 'audioMessage', 'documentMessage'])
+        const isMediaType = (type) => MEDIA_TYPES.has(type) ? true : undefined
         const getText = (type, messageData) => object[type] ? object[type](messageData) : ''
 
         const object = {

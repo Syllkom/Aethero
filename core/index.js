@@ -1,8 +1,8 @@
-import path from 'path';
-import { ForkManager } from "./library/MakeFork.js";
-import { PromptLoop } from './library/Question.js';
-import chalk from 'chalk';
-import fs from 'fs';
+import path from 'path'
+import { ForkManager } from "./library/makeFork.js"
+import { PromptLoop } from './library/question.js'
+import chalk from 'chalk'
+import fs from 'fs'
 
 async function EventMessage(m) {
     switch (m.type) {
@@ -23,15 +23,15 @@ async function EventMessage(m) {
 export class CoreI {
     constructor(modulePath, env, options) {
         this.modulePath = modulePath ?? path
-            .resolve('./core/main.js');
-        this.options = options;
-        this.fork = null;
-        this.env = env;
+            .resolve('./core/main.js')
+        this.options = options
+        this.fork = null
+        this.env = env
     }
 
     async stop() {
         await this.fork.stop()
-        return true;
+        return true
     }
 
     async start() {
@@ -45,24 +45,24 @@ export class CoreI {
             ...(this.options || {}), env: { ...env },
         })
 
-        await this.Event();
-        await this.fork.start();
+        await this.Event()
+        await this.fork.start()
     }
 
     Event() {
         this.fork.event.set('message', async (m) => {
             await EventMessage(m)
-        });
+        })
 
         this.fork.event.set('exit', async ({ code, signal }) => {
-            console.log({ code, signal });
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            await this.fork.start();
-        });
+            console.log({ code, signal })
+            await new Promise(resolve => setTimeout(resolve, 2000))
+            await this.fork.start()
+        })
 
         this.fork.event.set('error', (e) => {
             console.error(`Error:`, e)
-        });
+        })
     }
 }
 
@@ -75,39 +75,39 @@ async function Prompt(env) {
         '1. Código QR.', '2. Código de 8 dígitos.',
         'Escriba "exit" para cancelar.',
         '\x1b[1;31m~\x1b[1;37m> '
-    ]);
+    ])
 
     return await menu.run(async function (opcion) {
-        if (opcion === 'exit') return this.close();
+        if (opcion === 'exit') return this.close()
         if (opcion === '1') return this.resolve({
             connectType: 'qr-code',
             phoneNumber: ''
-        });
+        })
 
 
         if (opcion === '2') {
             const submenu = PromptLoop([
                 '\n\x1b[1;31m~\x1b[1;37m> ¿Cuál es el número que desea asignar como Bot?',
                 '(Escriba "back" para volver)', '\x1b[1;31m~\x1b[1;37m> '
-            ]);
+            ])
 
             const numeroResult = await submenu.run(async function (numero) {
-                if (numero.toLowerCase() === 'back') return this.resolve('__BACK__');
+                if (numero.toLowerCase() === 'back') return this.resolve('__BACK__')
                 if (!numero) return (console.log('\x1b[1;33mEl número es obligatorio.'
                     + ' Por favor ingrese un número válido.\x1b[0m'), this.continue())
-                return this.resolve(numero);
-            });
+                return this.resolve(numero)
+            })
 
-            if (numeroResult === '__BACK__') return this.continue();
+            if (numeroResult === '__BACK__') return this.continue()
 
             return this.resolve({
                 connectType: 'pin-code',
                 phoneNumber: numeroResult
-            });
+            })
         }
 
         console.log('\x1b[1;33mOpción no válida. '
-            + ' Intente de nuevo.\x1b[0m');
-        return this.continue();
-    });
-};
+            + ' Intente de nuevo.\x1b[0m')
+        return this.continue()
+    })
+}

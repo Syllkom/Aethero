@@ -1,15 +1,15 @@
 // ./config.js
-import path from 'path';
-import { color } from './library/utils.js';
+import path from 'path'
+import { color } from './library/utils.js'
 
-import dotenv from 'dotenv';
-dotenv.config();
+import dotenv from 'dotenv'
+dotenv.config()
 
 global.googleApiKey = process.env.GOOGLE_API_KEY || ''
 
 global.readMore = String
     .fromCharCode(8206)
-    .repeat(850);
+    .repeat(850)
 
 
 global.config = {
@@ -17,7 +17,7 @@ global.config = {
     prefixes: ".¿?¡!#%&/,~@",
     saveHistory: true,
     autoRead: true
-};
+}
 
 global.config.userRoles = {
     "5216678432366": {

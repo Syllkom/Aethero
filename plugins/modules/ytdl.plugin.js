@@ -1,10 +1,10 @@
-import { PassThrough } from 'node:stream';
-import https from 'node:https';
-import http from 'node:http';
-import got from 'got';
+import { PassThrough } from 'node:stream'
+import https from 'node:https'
+import http from 'node:http'
+import got from 'got'
 
-const httpAgent = new http.Agent({ keepAlive: true });
-const httpsAgent = new https.Agent({ keepAlive: true });
+const httpAgent = new http.Agent({ keepAlive: true })
+const httpsAgent = new https.Agent({ keepAlive: true })
 
 const URL = {
     async getInfo(url) {
@@ -25,7 +25,7 @@ export default {
             const API = `https://nayan-video-downloader.vercel.app`
             const data = (await got(`${API}/youtube?url=${encodeURIComponent(url)}`, {
                 headers: { 'Accept': 'application/json' }, responseType: 'json'
-            }))?.body;
+            }))?.body
 
             if (!data && !data.data) return false
             if (!data.data.formats?.length) return false
@@ -34,14 +34,14 @@ export default {
                 o.type === 'video_with_audio').map((o) => {
                     const stream = () => URL.getStream(o.url)
                     const buffer = async () => URL.getBuffer(o.url)
-                    return { ...o, download: { stream, buffer } };
+                    return { ...o, download: { stream, buffer } }
                 })
 
             const audios = data.data.formats.filter(
                 (o) => o.ext == 'opus').map((o) => {
                     const stream = () => URL.getStream(o.url)
                     const buffer = async () => URL.getBuffer(o.url)
-                    return { ...o, download: { stream, buffer } };
+                    return { ...o, download: { stream, buffer } }
                 })
 
             return {

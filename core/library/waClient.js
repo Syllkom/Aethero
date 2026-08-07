@@ -7,17 +7,17 @@ import {
     useMultiFileAuthState
 } from '@whiskeysockets/baileys';
 
-//import bind from './bind.js';
-import { EventEmitter } from 'events';
-import makeWASocket from '@whiskeysockets/baileys';
-import qrTerminal from 'qrcode-terminal';
-import { Boom } from '@hapi/boom';
-import { randomBytes } from 'crypto';
-import fs from 'fs/promises';
-import qrCode from 'qrcode';
-import pino from 'pino';
+//import bind from './bind.js'
+import { EventEmitter } from 'events'
+import makeWASocket from '@whiskeysockets/baileys'
+import qrTerminal from 'qrcode-terminal'
+import { Boom } from '@hapi/boom'
+import { randomBytes } from 'crypto'
+import fs from 'fs/promises'
+import qrCode from 'qrcode'
+import pino from 'pino'
 
-const { version } = await fetchLatestBaileysVersion();
+const { version } = await fetchLatestBaileysVersion()
 
 const CONNECTION = {
     version: version,
@@ -33,12 +33,12 @@ const CONNECTION = {
     browser: Browsers.ubuntu('Chrome'),
     patchMessageBeforeSending: (message) => {
         const UintArray = (numero) => Uint8Array
-            .from(randomBytes(numero));
-        message.messageContextInfo ||= {};
-        const info = message.messageContextInfo;
-        info.messageSecret ||= UintArray(32);
-        info.threadId ||= null;
-        return message;
+            .from(randomBytes(numero))
+        message.messageContextInfo ||= {}
+        const info = message.messageContextInfo
+        info.messageSecret ||= UintArray(32)
+        info.threadId ||= null
+        return message
     },
     transactionOpts: {
         maxCommitRetries: 5,
@@ -57,7 +57,7 @@ async function StartBot(object) {
 
     if (!object.folderPath) object.folderPath = './storage/creds'
     if (!object.connectType) object.connectType = 'qr-code'
-    await fs.mkdir(object.folderPath, { recursive: true });
+    await fs.mkdir(object.folderPath, { recursive: true })
 
     let { state, saveCreds } = await useMultiFileAuthState(object.folderPath)
     const keyStore = makeCacheableSignalKeyStore(state.keys,
@@ -76,15 +76,15 @@ async function StartBot(object) {
         sockConfig.browser = Browsers.macOS('Desktop')
     }
 
-    const sock = makeWASocket(sockConfig);
+    const sock = makeWASocket(sockConfig)
 
-    sock.ev.on('creds.update', saveCreds);
+    sock.ev.on('creds.update', saveCreds)
 
     if (object.connectType == 'pin-code') {
         let numero = object.phoneNumber.replace(/\D/g, '')
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        await new Promise(resolve => setTimeout(resolve, 3000))
         const pairingCode = await sock.requestPairingCode(numero,
-            object.customCode ?? null);
+            object.customCode ?? null)
         const data = {
             pairingCode: pairingCode,
             formattedCode: pairingCode
@@ -98,26 +98,26 @@ async function StartBot(object) {
         })
     }
 
-    // Object.assign(sock, await bind(sock));
+    // Object.assign(sock, await bind(sock))
 
     sock.ev.on('messages.upsert', async (m) => {
         object.events.emit('messages', m)
-    });
+    })
 
     sock.ev.on('connection.update', async (update) => {
-        const { lastDisconnect, connection, qr } = update;
+        const { lastDisconnect, connection, qr } = update
 
         if (connection === 'close') {
-            const reason = new Boom(lastDisconnect?.error)?.output?.statusCode || "error";
+            const reason = new Boom(lastDisconnect?.error)?.output?.statusCode || "error"
 
             if ([
                 DisconnectReason.restartRequired, DisconnectReason.connectionLost,
                 DisconnectReason.connectionClosed, DisconnectReason.unavailableService,
                 DisconnectReason.timedOut
             ].includes(reason)) {
-                object.events.emit('connection', { type: 'restart', reasonCode: reason });
+                object.events.emit('connection', { type: 'restart', reasonCode: reason })
                 if (reason === DisconnectReason.unavailableService)
-                    await new Promise(resolve => setTimeout(resolve, 5000));
+                    await new Promise(resolve => setTimeout(resolve, 5000))
                 await StartBot({ ...object, connectType: 'qr-code' })
             }
 
@@ -125,30 +125,30 @@ async function StartBot(object) {
                 DisconnectReason.loggedOut, DisconnectReason.badSession,
                 DisconnectReason.multideviceMismatch, DisconnectReason.forbidden
             ].includes(reason)) {
-                sock.ev.removeAllListeners();
-                sock.end(undefined);
-                object.events.emit('connection', { type: 'closed', reasonCode: reason });
+                sock.ev.removeAllListeners()
+                sock.end(undefined)
+                object.events.emit('connection', { type: 'closed', reasonCode: reason })
                 const exists = await fs.access(object.folderPath)
-                    .then(() => true).catch(() => false);
+                    .then(() => true).catch(() => false)
                 if (exists) await fs.rm(object.folderPath, {
                     recursive: true, force: true
-                });
-                object.resolve(null);
-                return;
+                })
+                object.resolve(null)
+                return
             }
 
             else if (reason === DisconnectReason.connectionReplaced) {
                 object.events.emit('connection',
-                    { type: 'replaced', reasonCode: reason });
-                sock.ev.removeAllListeners();
-                sock.end(undefined);
-                object.resolve(null);
-                return;
+                    { type: 'replaced', reasonCode: reason })
+                sock.ev.removeAllListeners()
+                sock.end(undefined)
+                object.resolve(null)
+                return
             } else {
                 object.events.emit('connection', {
                     type: 'error', reasonCode: reason, ...(lastDisconnect || {})
-                });
-                await new Promise(resolve => setTimeout(resolve, 5000));
+                })
+                await new Promise(resolve => setTimeout(resolve, 5000))
                 await StartBot({ ...object, connectType: 'qr-code' })
             }
         }
@@ -163,10 +163,10 @@ async function StartBot(object) {
             }
             object.events.emit('connection', {
                 type: 'open', data
-            });
+            })
 
-            object.resolve(sock);
-            return;
+            object.resolve(sock)
+            return
         }
 
         if (qr) {
@@ -203,30 +203,30 @@ export class MakeClient {
                 resolve
             }))
 
-        return this.sock;
+        return this.sock
     }
 
     async stop() {
-        if (!this.sock) return;
-        await this.sock?.ev?.removeAllListeners();
-        await this.sock?.end(undefined);
-        this.sock = null;
+        if (!this.sock) return
+        await this.sock?.ev?.removeAllListeners()
+        await this.sock?.end(undefined)
+        this.sock = null
     }
 
     async restart() {
-        if (!this.sock) return;
-        else this.stop();
+        if (!this.sock) return
+        else this.stop()
         await new Promise(resolve =>
-            setTimeout(resolve, 2000));
+            setTimeout(resolve, 2000))
         return await this.start({
             connectType: 'qr-code'
-        });
+        })
     }
 
     async logged() {
-        if (!this.sock) return;
-        await this.sock.logout();
-        await this.stop();
-        return true;
+        if (!this.sock) return
+        await this.sock.logout()
+        await this.stop()
+        return true
     }
 }
