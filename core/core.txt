@@ -1,0 +1,1237 @@
+Fecha: 24/7/2026, 2:32:02 p. m.
+Carpeta: core
+
+====================
+
+core/
+├── library/
+├── MakeFork.js
+├── Message.js
+├── Modules.js
+├── pathStore.js
+├── Question.js
+├── WAClient.js
+└── Watcher.js
+├── format.js
+├── index.js
+└── main.js
+
+====================
+
+format.js
+________
+   1 | // ./core/format.js
+   2 | 
+   3 | const message = {
+   4 |     key: Object(),
+   5 |     message: Object(),
+   6 |     raw: Object(),
+   7 |     id: String(),
+   8 |     category: String(),
+   9 |     type: String(),
+  10 | 
+  11 |     messageData: Object(),
+  12 |     contextInfo: Object(),
+  13 |     messageTimestamp: String(),
+  14 |     broadcast: Boolean(),
+  15 |     pushName: String(),
+  16 | 
+  17 |     quoted: Object({
+  18 |         key: Object(),
+  19 |         message: Object(),
+  20 |         raw: Object(),
+  21 |         id: String(),
+  22 |         category: String(),
+  23 |         type: String(),
+  24 | 
+  25 |         messageData: Object(),
+  26 |         contextInfo: Object(),
+  27 |     })
+  28 | }
+________
+
+index.js
+________
+   1 | import path from 'path';
+   2 | import { ForkManager } from "./library/MakeFork.js";
+   3 | import { PromptLoop } from './library/Question.js';
+   4 | import chalk from 'chalk';
+   5 | import fs from 'fs';
+   6 | 
+   7 | async function EventMessage(m) {
+   8 |     switch (m.type) {
+   9 |         case 'open': console.log(chalk.rgb(70, 209, 70)(
+  10 |             'Connection open:'), { ...m.data }); break
+  11 |         case 'close': console.log(chalk.rgb(201, 54, 54)(
+  12 |             'Connection close:'), { ...m.data }); break
+  13 | 
+  14 |         case 'pairing': {
+  15 |             if (m.event === 'qr-code') (console.log(chalk.
+  16 |                 rgb(16, 61, 207)('qr code:')), console.log(m.data.qrCodeText))
+  17 |             else if (m.event === 'pin-code') (console.log(chalk.
+  18 |                 rgb(16, 61, 207)('pin code:')), console.log(m.data.formattedCode))
+  19 |         }
+  20 |     }
+  21 | }
+  22 | 
+  23 | export class CoreI {
+  24 |     constructor(modulePath, env, options) {
+  25 |         this.modulePath = modulePath ?? path
+  26 |             .resolve('./core/main.js');
+  27 |         this.options = options;
+  28 |         this.fork = null;
+  29 |         this.env = env;
+  30 |     }
+  31 | 
+  32 |     async stop() {
+  33 |         await this.fork.stop()
+  34 |         return true;
+  35 |     }
+  36 | 
+  37 |     async start() {
+  38 |         let env = this.env ?? {}
+  39 |         if (!env.connOptions?.connectType) Object
+  40 |             .assign(env, { connOptions: await Prompt(env) })
+  41 | 
+  42 |         this.fork = new ForkManager(this.modulePath, {
+  43 |             execArgv: ['--max-old-space-size=512'],
+  44 |             cwd: path.resolve(process.cwd()), serialization: 'json',
+  45 |             ...(this.options || {}), env: { ...env },
+  46 |         })
+  47 | 
+  48 |         await this.Event();
+  49 |         await this.fork.start();
+  50 |     }
+  51 | 
+  52 |     Event() {
+  53 |         this.fork.event.set('message', async (m) => {
+  54 |             await EventMessage(m)
+  55 |         });
+  56 | 
+  57 |         this.fork.event.set('exit', async ({ code, signal }) => {
+  58 |             console.log({ code, signal });
+  59 |             await new Promise(resolve => setTimeout(resolve, 2000));
+  60 |             await this.fork.start();
+  61 |         });
+  62 | 
+  63 |         this.fork.event.set('error', (e) => {
+  64 |             console.error(`Error:`, e)
+  65 |         });
+  66 |     }
+  67 | }
+  68 | 
+  69 | async function Prompt(env) {
+  70 |     const creds = path.join(env.STORAGE, 'creds/creds.json')
+  71 |     if (fs.existsSync(creds)) return null
+  72 | 
+  73 |     const menu = PromptLoop([
+  74 |         '\n\x1b[1;31m~\x1b[1;37m> ¿Cómo desea conectarse?',
+  75 |         '1. Código QR.', '2. Código de 8 dígitos.',
+  76 |         'Escriba "exit" para cancelar.',
+  77 |         '\x1b[1;31m~\x1b[1;37m> '
+  78 |     ]);
+  79 | 
+  80 |     return await menu.run(async function (opcion) {
+  81 |         if (opcion === 'exit') return this.close();
+  82 |         if (opcion === '1') return this.resolve({
+  83 |             connectType: 'qr-code',
+  84 |             phoneNumber: ''
+  85 |         });
+  86 | 
+  87 | 
+  88 |         if (opcion === '2') {
+  89 |             const submenu = PromptLoop([
+  90 |                 '\n\x1b[1;31m~\x1b[1;37m> ¿Cuál es el número que desea asignar como Bot?',
+  91 |                 '(Escriba "back" para volver)', '\x1b[1;31m~\x1b[1;37m> '
+  92 |             ]);
+  93 | 
+  94 |             const numeroResult = await submenu.run(async function (numero) {
+  95 |                 if (numero.toLowerCase() === 'back') return this.resolve('__BACK__');
+  96 |                 if (!numero) return (console.log('\x1b[1;33mEl número es obligatorio.'
+  97 |                     + ' Por favor ingrese un número válido.\x1b[0m'), this.continue())
+  98 |                 return this.resolve(numero);
+  99 |             });
+ 100 | 
+ 101 |             if (numeroResult === '__BACK__') return this.continue();
+ 102 | 
+ 103 |             return this.resolve({
+ 104 |                 connectType: 'pin-code',
+ 105 |                 phoneNumber: numeroResult
+ 106 |             });
+ 107 |         }
+ 108 | 
+ 109 |         console.log('\x1b[1;33mOpción no válida. '
+ 110 |             + ' Intente de nuevo.\x1b[0m');
+ 111 |         return this.continue();
+ 112 |     });
+ 113 | };
+________
+
+library\MakeFork.js
+________
+   1 | // ./library/fork.js
+   2 | 
+   3 | import path from "path";
+   4 | import { fork } from "child_process";
+   5 | import EventEmitter from "events";
+   6 | 
+   7 | export class ForkManager {
+   8 |     constructor(filePath, options) {
+   9 |         if (typeof options.env == 'undefined')
+  10 |             return new Error('env:required');
+  11 |         this['@ev'] = new EventEmitter();
+  12 |         this.filePath = path.resolve(filePath);
+  13 |         this.EventDefine = [
+  14 |             'message', 'error', 'exit']
+  15 |         this['@status'] = 'stop';
+  16 |         this.options = options;
+  17 |         this.startTime = null;
+  18 |         this.forkEvent = {}
+  19 |         this.fork = null
+  20 |     }
+  21 | 
+  22 |     get event() {
+  23 |         return {
+  24 |             set: (name, fun) => {
+  25 |                 if (!(this.EventDefine).includes(name)) return;
+  26 |                 if (typeof fun !== 'function') return;
+  27 |                 this.forkEvent[name] = fun
+  28 |                 return true
+  29 |             },
+  30 |             delete: (name) => {
+  31 |                 if (!(this.EventDefine).includes(name)) return;
+  32 |                 delete this.forkEvent[name]
+  33 |                 return true
+  34 |             }
+  35 |         }
+  36 |     }
+  37 | 
+  38 |     async stop(fun) {
+  39 |         try {
+  40 |             if (this.fork) await this.fork.kill('SIGTERM')
+  41 |             this['@status'] = 'stop';
+  42 |             if (typeof fun === 'function') return await fun(this);
+  43 |         } catch (error) {
+  44 |             console.error(`Error stopping process: ${error}`);
+  45 |         }
+  46 |     }
+  47 | 
+  48 |     async start(fun) {
+  49 |         try {
+  50 |             if (this.fork) await this.stop()
+  51 |             this['@status'] = 'started';
+  52 | 
+  53 |             const development = structuredClone(this.options)
+  54 |             Object.keys(development.env).forEach((key) => {
+  55 |                 development.env[key] = JSON.stringify(development.env[key]);
+  56 |             })
+  57 |             this.fork = fork(this.filePath, { ...(development || {}) });
+  58 |             this.startTime = Date.now();
+  59 |             this.ev();
+  60 | 
+  61 |             if (typeof fun === 'function') {
+  62 |                 return await fun(this);
+  63 |             }
+  64 |         } catch (e) {
+  65 |             this['@status'] = 'stop';
+  66 |             console.error(e);
+  67 |         }
+  68 |     }
+  69 | 
+  70 |     ev() {
+  71 |         if (!this.fork) return;
+  72 |         this.fork.on('message', async (m) => {
+  73 |             try {
+  74 |                 if (typeof this.forkEvent?.message === 'function')
+  75 |                     return await this.forkEvent.message(m, this)
+  76 |             } catch (e) { console.error('Error handling message:', e) }
+  77 |         });
+  78 |         this.fork.on('error', async (m) => {
+  79 |             try {
+  80 |                 if (typeof this.forkEvent?.error === 'function')
+  81 |                     return await this.forkEvent.error(m, this)
+  82 |             } catch (e) { console.error('Error handling error event:', e) }
+  83 |         });
+  84 |         this.fork.on('exit', async (code, signal) => {
+  85 |             try {
+  86 |                 if (typeof this.forkEvent?.exit === 'function')
+  87 |                     return await this.forkEvent.exit({ code, signal }, this);
+  88 |             } catch (e) { console.error('Error handling exit event:', e); }
+  89 |         });
+  90 |     }
+  91 | 
+  92 |     send(content) {
+  93 |         return this.fork.send(content)
+  94 |     }
+  95 | 
+  96 |     get status() {
+  97 |         return { process: this.fork };
+  98 |     }
+  99 | 
+ 100 |     get uptime() {
+ 101 |         if (!this.startTime) return null;
+ 102 |         return Date.now() - this.startTime;
+ 103 |     }
+ 104 | }
+________
+
+library\Message.js
+________
+   1 | export const CATEGORIES = {
+   2 |     1: 'CONTENT', 0: 'SYSTEM',
+   3 |     W: 'WRAPPER'
+   4 | };
+   5 | 
+   6 | export const WRAPPER_TYPES = new Set([
+   7 |     'ephemeralMessage', 'viewOnceMessage', 'viewOnceMessageV2',
+   8 |     'viewOnceMessageV2Extension', 'documentWithCaptionMessage',
+   9 |     'deviceSentMessage', 'editedMessage'
+  10 | ]);
+  11 | 
+  12 | export const SYSTEM_TYPES = new Set([
+  13 |     'messageContextInfo', 'senderKeyDistributionMessage', 'fastRatchetKeySenderKeyDistributionMessage',
+  14 |     'protocolMessage', 'chat', 'call', 'callLogMesssage', 'scheduledCallCreationMessage',
+  15 |     'scheduledCallEditMessage', 'bcallMessage', 'keepInChatMessage', 'pinInChatMessage',
+  16 |     'stickerSyncRmrMessage', 'encReactionMessage', 'encCommentMessage', 'encEventResponseMessage',
+  17 |     'messageHistoryBundle', 'messageHistoryNotice', 'placeholderMessage', 'secretEncryptedMessage',
+  18 |     'statusNotificationMessage', 'statusMentionMessage', 'groupStatusMentionMessage',
+  19 |     'groupStatusMessage', 'groupStatusMessageV2', 'statusAddYours', 'statusQuestionAnswerMessage',
+  20 |     'statusQuotedMessage', 'statusStickerInteractionMessage'
+  21 | ]);
+  22 | 
+  23 | export const getCategoryCode = (type) => {
+  24 |     if (WRAPPER_TYPES.has(type)) return 'W';
+  25 |     if (SYSTEM_TYPES.has(type)) return 0;
+  26 |     return 1;
+  27 | };
+  28 | 
+  29 | export const resolveMessage = (msg) => {
+  30 |     let currentMsg = msg || {};
+  31 |     let type = Object.keys(currentMsg).find(k => getCategoryCode(k) !== 0)
+  32 |         || Object.keys(currentMsg).find(k => getCategoryCode(k) === 0);
+  33 | 
+  34 |     while (type && getCategoryCode(type) === 'W') {
+  35 |         currentMsg = currentMsg[type]?.message || {};
+  36 |         type = Object.keys(currentMsg).find(k => getCategoryCode(k) !== 0)
+  37 |             || Object.keys(currentMsg).find(k => getCategoryCode(k) === 0);
+  38 |     }
+  39 | 
+  40 |     return {
+  41 |         category: CATEGORIES[getCategoryCode(type)] || 'UNKNOWN',
+  42 |         messageData: currentMsg[type] || {},
+  43 |         type: type
+  44 |     };
+  45 | };
+________
+
+library\Modules.js
+________
+   1 | import { isDeepStrictEqual } from 'util';
+   2 | import { Watcher } from "./Watcher.js"
+   3 | import { pathToFileURL } from 'url';
+   4 | import path from "path";
+   5 | 
+   6 | const FileImport = async function (filePath) {
+   7 |     try {
+   8 |         const fileURL = (pathToFileURL(filePath)).href
+   9 |         const versionedURL = `${fileURL}?update=${Date.now()}`;
+  10 |         return await import(versionedURL)
+  11 |     } catch (e) {
+  12 |         if (e.code === 'ERR_UNSUPPORTED_DIR_IMPORT') return;
+  13 |         console.error(`Error (${filePath}):`, e);
+  14 |         return null;
+  15 |     }
+  16 | }
+  17 | 
+  18 | export class ModuleFolder {
+  19 |     constructor(FolderWatcher,
+  20 |         folder, suffix, defaultContext) {
+  21 | 
+  22 |         this.filesJS = new Map();
+  23 |         this.folder = path.resolve(folder);
+  24 |         this.store = FolderWatcher.storeManag
+  25 |             .getStore(this.folder);
+  26 | 
+  27 |         this.moduleExport = {};
+  28 |         this.exports = new Map();
+  29 |         this.exportFiles = new Map();
+  30 |         this.moduleExport.setFile = (filePath, module) => {
+  31 |             if (!module || !module.export) return;
+  32 |             const exportsKeys = Object.keys(module.export);
+  33 |             for (const key of exportsKeys) this.exports
+  34 |                 .set(key, module.export[key]);
+  35 |             this.exportFiles.set(filePath, exportsKeys);
+  36 |             return true;
+  37 |         }
+  38 | 
+  39 |         this.moduleExport.delFile = (filePath) => {
+  40 |             if (!this.exportFiles.has(filePath)) return;
+  41 |             const exportsKeys = this.exportFiles.get(filePath);
+  42 |             for (const key of exportsKeys) this.exports.delete(key);
+  43 |             this.exportFiles.delete(filePath);
+  44 |             return true;
+  45 |         }
+  46 | 
+  47 |         this.suffix = suffix;
+  48 |         this.moduleSuffix = {};
+  49 |         this.suffixFiles = new Map();
+  50 |         this.defaultContext = defaultContext;
+  51 |         this.moduleSuffix.setFile = (filePath, module) => {
+  52 |             for (const key of Object.keys(this.defaultContext))
+  53 |                 module[key] ??= this.defaultContext[key];
+  54 |             module.fileName = path.basename(filePath);
+  55 |             this.suffixFiles.set(filePath, module);
+  56 |             return true;
+  57 |         }
+  58 | 
+  59 |         this.moduleSuffix.delFile = (filePath) => {
+  60 |             this.suffixFiles.delete(filePath);
+  61 |             return true;
+  62 |         }
+  63 |     }
+  64 | 
+  65 |     file(path) {
+  66 |         const file = this.suffixFiles.get(path)
+  67 |         if (!file) return this.filesJS.get(path)
+  68 |         else return file
+  69 |     }
+  70 | 
+  71 |     folder(path) {
+  72 |         const dir = this.store.get(path)
+  73 |         if (Array.isArray(dir)) return dir;
+  74 |         else return undefined
+  75 |     }
+  76 | 
+  77 |     import(query) {
+  78 |         if (typeof query === 'string') {
+  79 |             return this.exports.get(query);
+  80 |         } else if (query?.file) return this
+  81 |             .file(query.file);
+  82 |         return null;
+  83 |     }
+  84 | 
+  85 |     export(key, value) {
+  86 |         if (!this.exports.has(key))
+  87 |             this.exports.set(key, value);
+  88 |         else Object.assign(this
+  89 |             .exports.get(key), value);
+  90 |         return this.exports.get(key);
+  91 |     }
+  92 | 
+  93 |     query(criteria) {
+  94 |         if (Array.isArray(criteria)
+  95 |             || typeof criteria !== 'object'
+  96 |             || criteria === null) return []
+  97 | 
+  98 |         const result = [];
+  99 |         for (const [relPath, plugin] of this.suffixFiles) {
+ 100 |             if (!plugin || typeof plugin !== 'object') continue;
+ 101 |             if (!relPath.endsWith(this.suffix)) continue;
+ 102 |             const Entries = Object.entries(criteria)
+ 103 |             const matches = Entries.every(([key, expected]) => {
+ 104 |                 const actual = plugin[key] !== undefined
+ 105 |                     ? plugin[key] : plugin.export?.[key];
+ 106 |                 if (actual === undefined) return false;
+ 107 |                 return this.matchValue(expected, actual);
+ 108 |             }); if (matches) result.push(plugin);
+ 109 |         }
+ 110 | 
+ 111 |         return result;
+ 112 |     }
+ 113 | 
+ 114 |     matchValue(a0, a1) {
+ 115 |         if (a0 === a1) return true;
+ 116 |         if (a0 instanceof RegExp) return (
+ 117 |             typeof a1 === 'string' && a0.test(a1))
+ 118 |         if (Array.isArray(a0) && Array.isArray(a1))
+ 119 |             return a0.some(v => a1.includes(v));
+ 120 |         if (typeof a0 === 'string' && Array.isArray(a1))
+ 121 |             return a1.includes(a0);
+ 122 |         if (Array.isArray(a0) && typeof a1 === 'string')
+ 123 |             return a0.includes(a1);
+ 124 |         return isDeepStrictEqual(a0, a1);
+ 125 |     }
+ 126 | 
+ 127 |     async ImportFile(filePath) {
+ 128 |         if (typeof filePath !== 'string') return;
+ 129 |         if (!filePath.endsWith('.js')) return null;
+ 130 | 
+ 131 |         const relativePath = path
+ 132 |             .relative(this.folder, filePath);
+ 133 |         if (!relativePath) return;
+ 134 | 
+ 135 |         this.moduleExport.delFile(relativePath);
+ 136 |         this.moduleSuffix.delFile(relativePath);
+ 137 |         const file = await FileImport(filePath);
+ 138 |         if (!file) return;
+ 139 | 
+ 140 |         if (filePath.endsWith(this.suffix)) {
+ 141 |             const content = file.default ?? { ...file };
+ 142 |             this.moduleSuffix.setFile(relativePath, content);
+ 143 |             this.moduleExport.setFile(relativePath, content);
+ 144 |             return content;
+ 145 |         } else {
+ 146 |             this.filesJS.set(relativePath, file);
+ 147 |             return file;
+ 148 |         }
+ 149 |     }
+ 150 | 
+ 151 |     removeFile(filePath) {
+ 152 |         if (typeof filePath !== 'string') return;
+ 153 |         if (!filePath.endsWith('.js')) return null;
+ 154 | 
+ 155 |         const relativePath = path
+ 156 |             .relative(this.folder, filePath);
+ 157 |         if (!relativePath) return;
+ 158 | 
+ 159 |         this.moduleExport.delFile(relativePath);
+ 160 |         this.moduleSuffix.delFile(relativePath);
+ 161 |         this.filesJS.delete(relativePath);
+ 162 |     }
+ 163 | }
+ 164 | 
+ 165 | export class ModuleRegistry {
+ 166 |     /*folders = [{
+ 167 |         folder: './handlers',
+ 168 |         suffix: '.handler.js',
+ 169 |         defaultContext: {}
+ 170 |     }, {
+ 171 |         folder: './plugins',
+ 172 |         suffix: '.plugin.js',
+ 173 |         defaultContext: {
+ 174 |             usePrefix: true,
+ 175 |             stubtype: false,
+ 176 |             command: false,
+ 177 |         }
+ 178 |     }]*/
+ 179 |     constructor(folders) {
+ 180 |         if (!Array.isArray(folders))
+ 181 |             throw new Error('Folders must be an array');
+ 182 |         const Folders = folders.filter(a => a.folder);
+ 183 |         if (!Folders.length) throw new Error('No valid folders');
+ 184 |         this.foldersMap = new Map();
+ 185 | 
+ 186 |         this.FolderWatcher = new Watcher(
+ 187 |             Folders.map(o => o.folder))
+ 188 | 
+ 189 |         this.FolderWatcher.eventHandler.add = async (filePath) => {
+ 190 |             const array = Array.from(this.foldersMap.keys());
+ 191 |             const findFolder = array.find((o) => filePath.startsWith(o))
+ 192 |             const folder = this.foldersMap.get(findFolder)
+ 193 |             if (folder) return folder.ImportFile(filePath);
+ 194 |         }
+ 195 | 
+ 196 |         this.FolderWatcher.eventHandler.change = async (filePath) => {
+ 197 |             const array = Array.from(this.foldersMap.keys())
+ 198 |             const findFolder = array.find((o) => filePath.startsWith(o))
+ 199 |             const folder = this.foldersMap.get(findFolder)
+ 200 |             if (folder) return folder.ImportFile(filePath);
+ 201 |         }
+ 202 | 
+ 203 |         this.FolderWatcher.eventHandler.unlink = (filePath) => {
+ 204 |             const array = Array.from(this.foldersMap.keys())
+ 205 |             const findFolder = array.find((o) => filePath.startsWith(o))
+ 206 |             const folder = this.foldersMap.get(findFolder)
+ 207 |             if (folder) return folder.removeFile(filePath);
+ 208 |         }
+ 209 | 
+ 210 |         for (let o of folders) {
+ 211 |             let folder = path.resolve(o.folder)
+ 212 |             this.foldersMap.set(folder, new ModuleFolder(
+ 213 |                 this.FolderWatcher, o.folder, o.suffix,
+ 214 |                 o.defaultContext))
+ 215 |         }
+ 216 |     }
+ 217 | 
+ 218 | 
+ 219 |     getFolder(identifier) {
+ 220 |         if (path.isAbsolute(identifier)) return this
+ 221 |             .foldersMap.get(path.resolve(identifier));
+ 222 |         return Array.from(this.foldersMap.entries())
+ 223 |             .find(([p]) => path.basename(p)
+ 224 |                 === identifier)?.[1];
+ 225 |     }
+ 226 | 
+ 227 |     get folders() {
+ 228 |         const result = {};
+ 229 |         for (const [key, value] of this.foldersMap) {
+ 230 |             result[path.basename(key)] = value;
+ 231 |         }; return result;
+ 232 |     }
+ 233 | 
+ 234 |     async start() {
+ 235 |        await this.FolderWatcher.start();
+ 236 |        return this;
+ 237 |     }
+ 238 | 
+ 239 |     async stop() {
+ 240 |         await this.FolderWatcher.stop();
+ 241 |         return this;
+ 242 |     }
+ 243 | }
+________
+
+library\pathStore.js
+________
+   1 | export class PathTree {
+   2 |     constructor() {
+   3 |         this.map = new Map();
+   4 |     }
+   5 | 
+   6 |     mapS(path, key) {
+   7 |         if (!this.map.has(path)) {
+   8 |             this.map.set(path, new Set());
+   9 |         } else this.map.get(path).add(key);
+  10 |     }
+  11 | 
+  12 |     mapD(path, key) {
+  13 |         const set = this.map.get(path);
+  14 |         if (!set) return false
+  15 |         set.delete(key);
+  16 |         if (set.size === 0) {
+  17 |             this.map.delete(path);
+  18 |         }
+  19 |     }
+  20 | 
+  21 |     pathSteps(array) {
+  22 |         const result = [];
+  23 |         for (let i = 0; i < array.length; i++) {
+  24 |             const a0 = array.slice(0, i + 1).join('/');
+  25 |             const a1 = (i + 1 < array.length) ? array[i + 1] : 0;
+  26 |             result.push([a0, a1]);
+  27 |         } return result;
+  28 |     }
+  29 | 
+  30 |     create(array) {
+  31 |         if (!array || array.length === 0) return;
+  32 |         const steps = this.pathSteps(array);
+  33 |         for (let [path, key] of steps) {
+  34 |             if (key !== 0) this.mapS(path, key);
+  35 |             else this.map.set(path, 1);
+  36 |         } return true
+  37 |     }
+  38 | 
+  39 |     delete(array) {
+  40 |         if (!array || array.length === 0) return;
+  41 |         const steps = this.pathSteps(array);
+  42 |         const fullPath = steps[steps.length - 1][0], toDelete = [];
+  43 |         for (const key of this.map.keys()) if (key === fullPath
+  44 |             || key.startsWith(fullPath + '/')) toDelete.push(key);
+  45 |         for (const key of toDelete) this.map.delete(key);
+  46 |         for (let i = steps.length - 2; i >= 0; i--) {
+  47 |             const [path, key] = steps[i];
+  48 |             if (key === 0) continue
+  49 |             if (!this.map.has(path)) continue;
+  50 |             this.mapD(path, key);
+  51 |         } return true;
+  52 |     }
+  53 | 
+  54 |     inspect() {
+  55 |         const result = {};
+  56 |         for (const [path, value] of this.map) {
+  57 |             result[path] = value instanceof Set
+  58 |                 ? Array.from(value) : value;
+  59 |         } return result;
+  60 |     }
+  61 | }
+  62 | 
+  63 | 
+  64 | export class pathStore {
+  65 |     constructor() {
+  66 |         this.pathReg = new PathTree()
+  67 |     }
+  68 | 
+  69 |     get size() { return this.pathReg.map.size }
+  70 |     keys() { return Array.from(this.pathReg.map.keys()) }
+  71 |     entries() { return Array.from(this.pathReg.map.entries()); }
+  72 |     values() { return Array.from(this.pathReg.map.values()); }
+  73 |     clear() { return this.pathReg.map.clear() }
+  74 | 
+  75 |     splitPath(path) {
+  76 |         const array = path.split(
+  77 |             /[/\\]+/).filter(Boolean);
+  78 |         return array;
+  79 |     }
+  80 | 
+  81 |     has(path) {
+  82 |         if (typeof path !== 'string') return false;
+  83 |         const parts = this.splitPath(path);
+  84 |         if (!parts.length) return false;
+  85 |         const fullPath = parts.join('/');
+  86 |         return this.pathReg.map.has(fullPath);
+  87 |     }
+  88 | 
+  89 |     set(path) {
+  90 |         if (typeof path !== 'string') return;
+  91 |         const parts = this.splitPath(path);
+  92 |         if (!parts?.length) return undefined;
+  93 |         return this.pathReg.create(parts)
+  94 |     }
+  95 | 
+  96 |     get(path) {
+  97 |         if (typeof path !== 'string') return;
+  98 |         const parts = this.splitPath(path);
+  99 |         if (!parts.length) return undefined;
+ 100 |         const fullPath = parts.join('/');
+ 101 |         const entry = this.pathReg.map.get(fullPath);
+ 102 |         if (entry === undefined) return undefined;
+ 103 |         if (entry instanceof Set) {
+ 104 |             return Array.from(entry);
+ 105 |         } else return entry;
+ 106 |     }
+ 107 | 
+ 108 |     delete(path) {
+ 109 |         if (typeof path !== 'string') return;
+ 110 |         const parts = this.splitPath(path);
+ 111 |         if (!parts?.length) return undefined;
+ 112 |         return this.pathReg.delete(parts)
+ 113 |     }
+ 114 | 
+ 115 |     isLeaf(path) {
+ 116 |         if (typeof path !== 'string') return false;
+ 117 |         const parts = this.splitPath(path);
+ 118 |         if (!parts.length) return false;
+ 119 |         const fullPath = parts.join('/');
+ 120 |         const entry = this.pathReg.map.get(fullPath);
+ 121 |         return entry !== undefined
+ 122 |             && !(entry instanceof Set);
+ 123 |     }
+ 124 | 
+ 125 |     forEach(callback) {
+ 126 |         if (typeof callback !== 'function') return;
+ 127 |         for (const [path, value] of this.pathReg.map) {
+ 128 |             callback(value, path, this.pathReg.map);
+ 129 |         }
+ 130 |     }
+ 131 | 
+ 132 |     toObject() {
+ 133 |         const result = {};
+ 134 |         for (const [path, value] of this.pathReg.map) {
+ 135 |             result[path] = value instanceof Set
+ 136 |                 ? Array.from(value) : value;
+ 137 |         }; return result;
+ 138 |     }
+ 139 | }
+ 140 | 
+________
+
+library\Question.js
+________
+   1 | import {
+   2 |     createInterface
+   3 | } from 'readline/promises';
+   4 | 
+   5 | const control = {
+   6 |     continue: () => [1],
+   7 |     resolve: (any) => [2, any],
+   8 |     close: () => [0],
+   9 | }
+  10 | 
+  11 | const readline = createInterface({
+  12 |     input: process.stdin,
+  13 |     output: process.stdout
+  14 | });
+  15 | 
+  16 | export const PromptLoop = (text) => ({
+  17 |     run: async (func) => {
+  18 |         if (Array.isArray(text)) text = text.filter(
+  19 |             (o) => typeof o === 'string').join('\n');
+  20 |         if (typeof text !== 'string') return;
+  21 | 
+  22 |         while (true) {
+  23 |             let ques = (await readline.question(text)).trim();
+  24 |             const result = await func.call(control, ques, control);
+  25 |             if (!Array.isArray(result)) continue;
+  26 |             if (result[0] === 2) return (readline.close(), result[1]);
+  27 |             if (result[0] === 0) return (readline.close(), 0);
+  28 |         }
+  29 |     }
+  30 | })
+  31 | 
+  32 | 
+________
+
+library\WAClient.js
+________
+   1 | 
+   2 | import {
+   3 |     Browsers,
+   4 |     DisconnectReason,
+   5 |     makeCacheableSignalKeyStore,
+   6 |     fetchLatestBaileysVersion,
+   7 |     useMultiFileAuthState
+   8 | } from '@whiskeysockets/baileys';
+   9 | 
+  10 | //import bind from './bind.js';
+  11 | import { EventEmitter } from 'events';
+  12 | import makeWASocket from '@whiskeysockets/baileys';
+  13 | import qrTerminal from 'qrcode-terminal';
+  14 | import { Boom } from '@hapi/boom';
+  15 | import { randomBytes } from 'crypto';
+  16 | import fs from 'fs/promises';
+  17 | import qrCode from 'qrcode';
+  18 | import pino from 'pino';
+  19 | 
+  20 | const { version } = await fetchLatestBaileysVersion();
+  21 | 
+  22 | const CONNECTION = {
+  23 |     version: version,
+  24 |     emitOwnEvents: true,
+  25 |     fireInitQueries: false,
+  26 |     syncFullHistory: false,
+  27 |     connectTimeoutMs: 60000,
+  28 |     retryRequestDelayMs: 5000,
+  29 |     keepAliveIntervalMs: 30000,
+  30 |     markOnlineOnConnect: false,
+  31 |     generateHighQualityLinkPreview: true,
+  32 |     logger: pino({ level: 'silent' }),
+  33 |     browser: Browsers.ubuntu('Chrome'),
+  34 |     patchMessageBeforeSending: (message) => {
+  35 |         const UintArray = (numero) => Uint8Array
+  36 |             .from(randomBytes(numero));
+  37 |         message.messageContextInfo ||= {};
+  38 |         const info = message.messageContextInfo;
+  39 |         info.messageSecret ||= UintArray(32);
+  40 |         info.threadId ||= null;
+  41 |         return message;
+  42 |     },
+  43 |     transactionOpts: {
+  44 |         maxCommitRetries: 5,
+  45 |         delayBetweenTriesMs: 5000
+  46 |     },
+  47 |     appStateMacVerification: {
+  48 |         patch: true,
+  49 |         snapshot: true
+  50 |     },
+  51 | }
+  52 | 
+  53 | async function StartBot(object) {
+  54 |     object.connectOptions = {
+  55 |         ...CONNECTION, ...(object.connectOptions || {})
+  56 |     }
+  57 | 
+  58 |     if (!object.folderPath) object.folderPath = './storage/creds'
+  59 |     if (!object.connectType) object.connectType = 'qr-code'
+  60 |     await fs.mkdir(object.folderPath, { recursive: true });
+  61 | 
+  62 |     let { state, saveCreds } = await useMultiFileAuthState(object.folderPath)
+  63 |     const keyStore = makeCacheableSignalKeyStore(state.keys,
+  64 |         pino({ level: "fatal" }).child({ level: "fatal" }))
+  65 | 
+  66 |     const sockConfig = {
+  67 |         ...object.connectOptions
+  68 |     }
+  69 | 
+  70 |     sockConfig.auth = {
+  71 |         creds: state.creds,
+  72 |         keys: keyStore
+  73 |     }
+  74 | 
+  75 |     if (object.connectType == 'qr-code') {
+  76 |         sockConfig.browser = Browsers.macOS('Desktop')
+  77 |     }
+  78 | 
+  79 |     const sock = makeWASocket(sockConfig);
+  80 | 
+  81 |     sock.ev.on('creds.update', saveCreds);
+  82 | 
+  83 |     if (object.connectType == 'pin-code') {
+  84 |         let numero = object.phoneNumber.replace(/\D/g, '')
+  85 |         await new Promise(resolve => setTimeout(resolve, 3000));
+  86 |         const pairingCode = await sock.requestPairingCode(numero,
+  87 |             object.customCode ?? null);
+  88 |         const data = {
+  89 |             pairingCode: pairingCode,
+  90 |             formattedCode: pairingCode
+  91 |                 .match(/.{1,4}/g)?.join("-") ??
+  92 |                 pairingCode
+  93 |         }
+  94 |         object.events.emit('connection', {
+  95 |             type: 'pairing',
+  96 |             event: 'pin-code',
+  97 |             data: data
+  98 |         })
+  99 |     }
+ 100 | 
+ 101 |     // Object.assign(sock, await bind(sock));
+ 102 | 
+ 103 |     sock.ev.on('messages.upsert', async (m) => {
+ 104 |         object.events.emit('messages', m)
+ 105 |     });
+ 106 | 
+ 107 |     sock.ev.on('connection.update', async (update) => {
+ 108 |         const { lastDisconnect, connection, qr } = update;
+ 109 | 
+ 110 |         if (connection === 'close') {
+ 111 |             const reason = new Boom(lastDisconnect?.error)?.output?.statusCode || "error";
+ 112 | 
+ 113 |             if ([
+ 114 |                 DisconnectReason.restartRequired, DisconnectReason.connectionLost,
+ 115 |                 DisconnectReason.connectionClosed, DisconnectReason.unavailableService,
+ 116 |                 DisconnectReason.timedOut
+ 117 |             ].includes(reason)) {
+ 118 |                 object.events.emit('connection', { type: 'restart', reasonCode: reason });
+ 119 |                 if (reason === DisconnectReason.unavailableService)
+ 120 |                     await new Promise(resolve => setTimeout(resolve, 5000));
+ 121 |                 await StartBot({ ...object, connectType: 'qr-code' })
+ 122 |             }
+ 123 | 
+ 124 |             else if ([
+ 125 |                 DisconnectReason.loggedOut, DisconnectReason.badSession,
+ 126 |                 DisconnectReason.multideviceMismatch, DisconnectReason.forbidden
+ 127 |             ].includes(reason)) {
+ 128 |                 sock.ev.removeAllListeners();
+ 129 |                 sock.end(undefined);
+ 130 |                 object.events.emit('connection', { type: 'closed', reasonCode: reason });
+ 131 |                 const exists = await fs.access(object.folderPath)
+ 132 |                     .then(() => true).catch(() => false);
+ 133 |                 if (exists) await fs.rm(object.folderPath, {
+ 134 |                     recursive: true, force: true
+ 135 |                 });
+ 136 |                 object.resolve(null);
+ 137 |                 return;
+ 138 |             }
+ 139 | 
+ 140 |             else if (reason === DisconnectReason.connectionReplaced) {
+ 141 |                 object.events.emit('connection',
+ 142 |                     { type: 'replaced', reasonCode: reason });
+ 143 |                 sock.ev.removeAllListeners();
+ 144 |                 sock.end(undefined);
+ 145 |                 object.resolve(null);
+ 146 |                 return;
+ 147 |             } else {
+ 148 |                 object.events.emit('connection', {
+ 149 |                     type: 'error', reasonCode: reason, ...(lastDisconnect || {})
+ 150 |                 });
+ 151 |                 await new Promise(resolve => setTimeout(resolve, 5000));
+ 152 |                 await StartBot({ ...object, connectType: 'qr-code' })
+ 153 |             }
+ 154 |         }
+ 155 | 
+ 156 |         if (connection === 'open') {
+ 157 |             const data = {
+ 158 |                 ...sock.user,
+ 159 |                 lid: sock.user.lid.split(":")[0]
+ 160 |                     + "@lid",
+ 161 |                 id: sock.user.id.split(":")[0]
+ 162 |                     + "@s.whatsapp.net"
+ 163 |             }
+ 164 |             object.events.emit('connection', {
+ 165 |                 type: 'open', data
+ 166 |             });
+ 167 | 
+ 168 |             object.resolve(sock);
+ 169 |             return;
+ 170 |         }
+ 171 | 
+ 172 |         if (qr) {
+ 173 |             const data = {
+ 174 |                 rawQrCode: qr,
+ 175 |                 qrCodeImage: await qrCode.toDataURL(qr),
+ 176 |                 qrCodeText: await new Promise((resolve) =>
+ 177 |                     qrTerminal.generate(qr, { small: true },
+ 178 |                         (qrCode) => resolve(qrCode)))
+ 179 |             }
+ 180 |             object.events.emit('connection', {
+ 181 |                 type: 'pairing',
+ 182 |                 event: 'qr-code',
+ 183 |                 data
+ 184 |             })
+ 185 |         }
+ 186 |     })
+ 187 | }
+ 188 | 
+ 189 | export class MakeClient {
+ 190 |     constructor(connection) {
+ 191 |         this.events = new EventEmitter()
+ 192 |         this.connection = {
+ 193 |             ...CONNECTION,
+ 194 |             ...connection
+ 195 |         }
+ 196 |     }
+ 197 | 
+ 198 |     async start(options) {
+ 199 |         this.sock = await new Promise(
+ 200 |             async resolve => await StartBot({
+ 201 |                 connectOptions: this.connection,
+ 202 |                 ...options, events: this.events,
+ 203 |                 resolve
+ 204 |             }))
+ 205 | 
+ 206 |         return this.sock;
+ 207 |     }
+ 208 | 
+ 209 |     async stop() {
+ 210 |         if (!this.sock) return;
+ 211 |         await this.sock?.ev?.removeAllListeners();
+ 212 |         await this.sock?.end(undefined);
+ 213 |         this.sock = null;
+ 214 |     }
+ 215 | 
+ 216 |     async restart() {
+ 217 |         if (!this.sock) return;
+ 218 |         else this.stop();
+ 219 |         await new Promise(resolve =>
+ 220 |             setTimeout(resolve, 2000));
+ 221 |         return await this.start({
+ 222 |             connectType: 'qr-code'
+ 223 |         });
+ 224 |     }
+ 225 | 
+ 226 |     async logged() {
+ 227 |         if (!this.sock) return;
+ 228 |         await this.sock.logout();
+ 229 |         await this.stop();
+ 230 |         return true;
+ 231 |     }
+ 232 | }
+________
+
+library\Watcher.js
+________
+   1 | import path from "path";
+   2 | import { pathToFileURL } from 'url';
+   3 | import { isDeepStrictEqual } from 'util';
+   4 | import { watch } from 'chokidar';
+   5 | 
+   6 | import { pathStore } from "./pathStore.js";
+   7 | 
+   8 | export class StoreColl {
+   9 |     constructor(folders) {
+  10 |         this.mapFolders = new Map();
+  11 |         folders.forEach(f => this.mapFolders.set(path
+  12 |             .resolve(f), new pathStore()));
+  13 |     }
+  14 | 
+  15 |     getStore(identifier) {
+  16 |         if (path.isAbsolute(identifier)) return this
+  17 |             .mapFolders.get(path.resolve(identifier));
+  18 |         return Array.from(this.mapFolders.entries())
+  19 |             .find(([p]) => path.basename(p)
+  20 |                 === identifier)?.[1];
+  21 |     }
+  22 | 
+  23 |     findStore(filePath) {
+  24 |         const array = Array.from(this.mapFolders)
+  25 |         const entry = array.find(([f]) => filePath.startsWith(f));
+  26 |         if (!entry) return undefined;
+  27 |         const relative = path.relative(entry[0], filePath)
+  28 |         return { store: entry[1], relative: relative };
+  29 |     }
+  30 | 
+  31 |     getFile(filePath) {
+  32 |         const info = this.findStore(filePath);
+  33 |         return info?.store.get(info.relative);
+  34 |     }
+  35 | 
+  36 |     setFile(filePath) {
+  37 |         const info = this.findStore(filePath);
+  38 |         return info ? info.store.set(info
+  39 |             .relative) : undefined;
+  40 |     }
+  41 | 
+  42 |     deleteFile(filePath) {
+  43 |         const info = this.findStore(filePath);
+  44 |         return info ? info.store.delete(info
+  45 |             .relative) : undefined;
+  46 |     }
+  47 | 
+  48 |     get folders() {
+  49 |         return Array.from(this.mapFolders, ([p, s]) => ({
+  50 |             name: path.basename(p), path: p, store: s
+  51 |         }));
+  52 |     }
+  53 | }
+  54 | 
+  55 | export class Watcher {
+  56 |     constructor(foldersPath, eventHandler, watchOptions) {
+  57 | 
+  58 |         this.foldersPath = (Array.isArray(foldersPath)
+  59 |             ? foldersPath : [foldersPath]).map(o => path.resolve(o))
+  60 |         this.storeManag = new StoreColl(this.foldersPath)
+  61 |         this.eventHandler = eventHandler || {};
+  62 | 
+  63 |         this.watch = watch(this.foldersPath, {
+  64 |             persistent: true, depth: 99, awaitWriteFinish: true,
+  65 |             ignoreInitial: false, ...(watchOptions || {})
+  66 |         });
+  67 |     }
+  68 | 
+  69 |     stop() { return this.watch.close(); }
+  70 | 
+  71 |     start() {
+  72 |         return new Promise((resolve, reject) => {
+  73 |             this.events(resolve, reject)
+  74 |         });
+  75 |     }
+  76 | 
+  77 |     events(resolve, reject) {
+  78 |         this.watch.on('add', async (filePath) => {
+  79 |             const info = this.storeManag.findStore(filePath);
+  80 |             if (!info) return undefined;
+  81 |             this.storeManag.setFile(filePath);
+  82 |             if (this.eventHandler?.add) await this.eventHandler
+  83 |                 .add(filePath, info.relative, info.store);
+  84 | 
+  85 |         });
+  86 | 
+  87 |         this.watch.on('change', async (filePath) => {
+  88 |             const info = this.storeManag.findStore(filePath);
+  89 |             if (info && this.eventHandler?.change) await this.eventHandler
+  90 |                 .change(filePath, info.relative, info.store);
+  91 |         });
+  92 | 
+  93 |         this.watch.on('unlink', async (filePath) => {
+  94 |             const info = this.storeManag.findStore(filePath);
+  95 |             if (!info) return undefined;
+  96 |             this.storeManag.deleteFile(filePath);
+  97 |             if (this.eventHandler?.unlink) await this.eventHandler
+  98 |                 .unlink(filePath, info.relative, info.store);
+  99 |         });
+ 100 | 
+ 101 |         this.watch.on('error', (e) => {
+ 102 |             console.error("\x1b[31m[x] FolderWatchJS:\x1b[0m", e);
+ 103 |             reject(e);
+ 104 |         }).on('ready', () => {
+ 105 |             resolve();
+ 106 |         });
+ 107 |     }
+ 108 | }
+ 109 | 
+________
+
+main.js
+________
+   1 | // ./core/main.js
+   2 | 
+   3 | import path from 'path';
+   4 | import { pathToFileURL } from 'url';
+   5 | import chalk from 'chalk';
+   6 | import fs from 'fs';
+   7 | 
+   8 | chalk.level = 2
+   9 | 
+  10 | const env = {}
+  11 | for (const key of Object.keys(process.env))
+  12 |     try { env[key] = JSON.parse(process.env[key]) }
+  13 |     catch { env[key] = process.env[key] }
+  14 | 
+  15 | if (!env.STORAGE) throw new Error('STORAGE missing');
+  16 | 
+  17 | fs.mkdirSync(env.STORAGE, { recursive: true });
+  18 | for (const _folder of ['creds', 'store', 'temp']) fs.mkdirSync(
+  19 |     path.join(env.STORAGE, _folder), { recursive: true });
+  20 | 
+  21 | if (env.CONFIG) await import(pathToFileURL(env.CONFIG))
+  22 | 
+  23 | if (!env.MODULEREGISTRY) throw new Error('MODULEREGISTRY missing');
+  24 | if (!Array.isArray(env.MODULEREGISTRY)) throw new Error('MODULEREGISTRY must be an array');
+  25 | 
+  26 | for (const module of env.MODULEREGISTRY) if (!fs.existsSync(module.folder))
+  27 |     throw new Error(`Folder not found: ${module.folder}`);
+  28 | 
+  29 | const mainModule = env.MODULEREGISTRY.find(o => o.mainLogic);
+  30 | if (!mainModule) throw new Error('Main execution module missing');
+  31 | 
+  32 | // library
+  33 | import { MakeClient } from './library/WAClient.js';
+  34 | import { ModuleRegistry } from './library/Modules.js';
+  35 | import { resolveMessage } from './library/Message.js';
+  36 | 
+  37 | const modules = await (new ModuleRegistry(env.MODULEREGISTRY)).start()
+  38 | const mainFolderName = path.basename(mainModule.folder)
+  39 | const mainLogic = modules.getFolder(mainFolderName)
+  40 | 
+  41 | // start
+  42 | async function StartBot() {
+  43 |     const mainBot = new MakeClient();
+  44 | 
+  45 |     mainBot.events.on('connection', async (update) => {
+  46 |         process.send(update)
+  47 |     });
+  48 | 
+  49 |     const sock = await mainBot.start({
+  50 |         folderPath: path.join(env.STORAGE, 'creds'),
+  51 |         ...env.connOptions
+  52 |     });
+  53 | 
+  54 |     mainBot.events.on('messages', async (rawMessages) => {
+  55 |         rawMessages = rawMessages?.messages
+  56 |         if (!rawMessages) return;
+  57 |         for (let rawMessage of rawMessages) {
+  58 |             if (!rawMessage) continue;
+  59 | 
+  60 |             const message = resolveMessage(
+  61 |                 rawMessage.message)
+  62 | 
+  63 |             const m = {
+  64 |                 key: rawMessage.key,
+  65 |                 message: rawMessage.message,
+  66 |                 get raw() { return rawMessage },
+  67 |                 id: rawMessage.key.id,
+  68 |                 category: message.category,
+  69 |                 type: message.type,
+  70 | 
+  71 |                 get messageData() { return message.messageData },
+  72 |                 contextInfo: message.messageData?.contextInfo,
+  73 |                 messageTimestamp: rawMessage.messageTimestamp,
+  74 |                 broadcast: rawMessage.broadcast,
+  75 |                 pushName: rawMessage.pushName,
+  76 |             }
+  77 | 
+  78 |             if (m.contextInfo?.quotedMessage) {
+  79 |                 const bot = sock.user.id.split(":")[0]
+  80 |                 const key = { id: m.contextInfo?.stanzaId };
+  81 |                 key.remoteJid = m.contextInfo?.remoteJid || m.raw.key.remoteJid;
+  82 |                 key.fromMe = m.contextInfo?.participant == bot + "@s.whatsapp.net"
+  83 |                 key.participant = m.contextInfo?.participant;
+  84 | 
+  85 |                 const quotedMessage = m.contextInfo?.quotedMessage
+  86 |                 const quoted = resolveMessage(quotedMessage)
+  87 | 
+  88 |                 m.quoted = {
+  89 |                     key: key, message: quotedMessage,
+  90 |                     id: m.contextInfo?.stanzaId, type: quoted.type,
+  91 |                     get raw() { return { key, message: quotedMessage } },
+  92 |                     get messageData() { return quoted.messageData },
+  93 |                     contextInfo: quoted.messageData.contextInfo,
+  94 |                     quotedType: m.contextInfo?.quotedType,
+  95 |                     category: quoted.category,
+  96 |                 };
+  97 |             }
+  98 | 
+  99 |             try {
+ 100 |                 let control = { end: false };
+ 101 |                 const files = mainLogic.query({ enabled: true })
+ 102 |                 const sort = files.sort((a, b) => {
+ 103 |                     const priorityA = a.priority ?? Infinity;
+ 104 |                     const priorityB = b.priority ?? Infinity;
+ 105 |                     return priorityA - priorityB;
+ 106 |                 })
+ 107 | 
+ 108 |                 for (let handler of sort) {
+ 109 |                     if (control.end) break;
+ 110 |                     await handler.script.call(m, {
+ 111 |                         sock, control, modules
+ 112 |                     });
+ 113 |                 }
+ 114 | 
+ 115 | 
+ 116 |                 console.log(m)
+ 117 |             } catch (e) {
+ 118 |                 if (e.output?.statusCode === 428) {
+ 119 |                     return await mainBot.restart();
+ 120 |                 } else console.error(e);
+ 121 |             }
+ 122 |         }
+ 123 |     })
+ 124 | 
+ 125 |     sock.ev.on('call', async (call) => {
+ 126 |         const callInfo = call[0]
+ 127 |         if (callInfo.status === 'offer') await sock
+ 128 |             .rejectCall(callInfo.id, callInfo.from)
+ 129 |     })
+ 130 | }
+ 131 | 
+ 132 | await StartBot()
+________
