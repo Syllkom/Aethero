@@ -26,7 +26,7 @@ const bot = new CoreI(null, {
             }
         },
         {
-            folder: path.resolve('./scrapers'),
+            folder: path.resolve('./library/scrapers'),
             suffix: '.scraper.js',
             defaultContext: {
                 enable: true
