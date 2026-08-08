@@ -1,9 +1,13 @@
 // ./config.js
-import path from 'path'
-import { color } from './library/utils.js'
+process.env.HOME = process.cwd()
 
+import path from 'path'
+import chalk from 'chalk'
 import dotenv from 'dotenv'
 dotenv.config()
+
+import base from './core/library/hyperDBAdapter.js'
+global.db = base
 
 global.googleApiKey = process.env.GOOGLE_API_KEY || ''
 
@@ -11,16 +15,26 @@ global.readMore = String
     .fromCharCode(8206)
     .repeat(850)
 
+global.font = {
+    NunitoSans: { Bold: 'https://tinyurl.com/NunitoSans-Bold' },
+    NotoSans: { Bold: 'https://tinyurl.com/NotoSans-Bold' },
+    Anton: { Regular: 'https://tinyurl.com/Anton-Regular' },
+    MonoSpace: { Regular: 'https://tinyurl.com/SpaceMono' },
+    Montserrat: { Italic: 'https://tinyurl.com/Montserrat-LightItalic' },
+    Raleway: { ExtraBold: 'https://tinyurl.com/Raleway-ExtraBold' }
+}
 
 global.config = {
-    name: "Jun",
+    name: "Aethero",
     prefixes: ".¿?¡!#%&/,~@",
     saveHistory: true,
-    autoRead: true
+    autoRead: false,
+    silentConsole: true,
+    startupNotification: false
 }
 
 global.config.userRoles = {
-    "5216678432366": {
+    "447342719758": {
         root: true,
         owner: true,
         mod: true,
@@ -47,11 +61,16 @@ global.MSG = {
     restrict: 'Esta función está desactivada'
 }
 
-
 global.PLUGINS_MSG = {
-    newPlugin: `${color.bg.rgb(119, 205, 255)}${color.rgb(0, 0, 0)}Nuevo plugin: ${color.rgb(255, 255, 255)}${color.reset}`,
-    updatedPlugin: `${color.bg.rgb(239, 250, 142)}${color.rgb(0, 0, 0)}Recargando plugin: ${color.rgb(255, 255, 255)}${color.reset}`,
-    deletedPlugin: `${color.bg.rgb(241, 114, 114)}${color.rgb(0, 0, 0)}Plugin eliminado: ${color.rgb(255, 255, 255)}${color.reset}`
+    newPlugin: `${chalk.bgRgb(119, 205, 255).rgb(0, 0, 0)('Nuevo plugin:')} `,
+    updatedPlugin: `${chalk.bgRgb(239, 250, 142).rgb(0, 0, 0)('Recargando plugin:')} `,
+    deletedPlugin: `${chalk.bgRgb(241, 114, 114).rgb(0, 0, 0)('Plugin eliminado:')} `
+}
+
+global.SCRAPERS_MSG = {
+    newScraper: `${chalk.bgRgb(255, 165, 0).rgb(0, 0, 0)('Nuevo scraper:')} `,
+    updatedScraper: `${chalk.bgRgb(255, 215, 0).rgb(0, 0, 0)('Recargando scraper:')} `,
+    deletedScraper: `${chalk.bgRgb(220, 20, 60).rgb(0, 0, 0)('Scraper eliminado:')} `
 }
 
 global.$dir_main = {

@@ -1,4 +1,4 @@
-
+import { useHyperDBAuthState } from './hyperDBAuth.js'
 import {
     Browsers,
     DisconnectReason,
@@ -59,7 +59,7 @@ async function StartBot(object) {
     if (!object.connectType) object.connectType = 'qr-code'
     await fs.mkdir(object.folderPath, { recursive: true })
 
-    let { state, saveCreds } = await useMultiFileAuthState(object.folderPath)
+    let { state, saveCreds } = await useHyperDBAuthState(object.sessionName || 'main')
     const keyStore = makeCacheableSignalKeyStore(state.keys,
         pino({ level: "fatal" }).child({ level: "fatal" }))
 

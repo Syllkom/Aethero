@@ -1,3 +1,6 @@
+// ./handlers/m.content.handler.js
+import { downloadMediaMessage } from '@whiskeysockets/baileys'
+
 export default {
     enabled: true,
     priority: 0.02,
