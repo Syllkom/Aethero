@@ -36,6 +36,20 @@ export const mapButtons = (buttons = []) => {
             case 'location': name = 'send_location'; params = { display_text: btn.text, id: btn.id || 'location_req' }; break
             case 'vcard': name = 'vcard_message'; params = { display_text: btn.text, vcard: btn.vcard }; break
             case 'list': name = 'single_select'; params = { title: btn.text, sections: btn.sections }; break
+            case 'signup': return { name: 'inapp_signup', buttonParamsJson: "{}" }
+            case 'contact': return { name: 'request_contact_info' }
+            case 'order_status':
+                name = 'order_status'
+                params = {
+                    reference_id: btn.referenceId || "360",
+                    order: {
+                        status: btn.status || "completed",
+                        subtotal: { value: (btn.price || 100) * 100, offset: 100 },
+                        tax: { value: 0, offset: 100 },
+                        currency: btn.currency || "IDR"
+                    }
+                }
+                break
             case 'galaxy':
             case 'flow':
                 name = 'galaxy_message'
@@ -59,6 +73,94 @@ export const mapButtons = (buttons = []) => {
 
         return { name, buttonParamsJson: JSON.stringify(params) }
     })
+}
+
+export const buildOrderStatusMenu = async (sock, jid, data, options = {}) => {
+    let headerObj = {
+        title: data.title || "",
+        subtitle: data.subtitle || "",
+        hasMediaAttachment: false
+    }
+
+    if (data.image) {
+        let imgBuffer = Buffer.isBuffer(data.image) ? data.image : await sock.getBuffer(data.image)
+        const content = await sock.generateWMContent({ image: imgBuffer })
+        headerObj.hasMediaAttachment = true
+        headerObj.imageMessage = content.imageMessage
+    } else if (data.video) {
+        let vidBuffer = Buffer.isBuffer(data.video) ? data.video : await sock.getBuffer(data.video)
+        const content = await sock.generateWMContent({ video: vidBuffer })
+        headerObj.hasMediaAttachment = true
+        headerObj.videoMessage = content.videoMessage
+    }
+
+    const buttons = mapButtons(data.buttons)
+    let messageParams = {}
+
+    if (data.bottomSheet) {
+        messageParams.bottom_sheet = {
+            in_thread_buttons_limit: data.bottomSheet.limit || 1,
+            divider_indices: Array.from({length: buttons.length}, (_, i) => i + 1),
+            list_title: data.bottomSheet.title || "Menú",
+            button_title: data.bottomSheet.buttonTitle || "Opciones"
+        }
+    }
+
+    if (data.offer) {
+        messageParams.limited_time_offer = {
+            text: data.offer.text || "Oferta Especial",
+            url: data.offer.url || "https://github.com/Syllkom",
+            ...(data.offer.code ? { copy_code: data.offer.code } : {}),
+            expiration_time: data.offer.expiration || (Date.now() + 259200000)
+        }
+    }
+
+    let ctxInfo = { 
+        mentionedJid: options.mentions || [], 
+        remoteJid: jid,
+        pairedMediaType: 0
+    }
+
+    if (options.quoted) {
+        const q = options.quoted
+        ctxInfo.stanzaId = q.key?.id
+        ctxInfo.participant = q.key?.participant || q.key?.remoteJid
+        ctxInfo.quotedMessage = q.message
+    }
+
+    if (data.inline) {
+        buttons.unshift({ name: "" })
+        ctxInfo.isForwarded = false
+        ctxInfo.forwardingScore = 9999
+    }
+
+    const message = {
+        interactiveMessage: {
+            header: headerObj,
+            body: { text: data.body || data.text || "" },
+            footer: { text: data.footer || "" },
+            nativeFlowMessage: {
+                buttons: buttons,
+                messageParamsJson: Object.keys(messageParams).length ? JSON.stringify(messageParams) : " "
+            },
+            contextInfo: ctxInfo
+        }
+    }
+
+    const nodes = [{
+        tag: "biz",
+        attrs: {},
+        content: [{
+            tag: "interactive",
+            attrs: { type: "native_flow", v: "1" },
+            content: [{
+                tag: "native_flow",
+                attrs: { v: "9", name: "mixed" }
+            }]
+        }]
+    }]
+
+    return { message, nodes }
 }
 
 export const buildMediaMenu = async (sock, jid, data, options) => {
@@ -101,7 +203,6 @@ export const buildMediaMenu = async (sock, jid, data, options) => {
         }
     }
 
-    // 1. Declarar ctxInfo primero
     let ctxInfo = { mentionedJid: options.mentions || [], remoteJid: jid }
     if (options.quoted) {
         const q = options.quoted
@@ -110,7 +211,6 @@ export const buildMediaMenu = async (sock, jid, data, options) => {
         ctxInfo.quotedMessage = q.message
     }
 
-    // 2. Ahora sí aplicar la lógica de inline
     if (data.inline) {
         buttons.unshift({ name: "" })
         ctxInfo.isForwarded = false
@@ -525,4 +625,67 @@ export const buildAdMenu = async (sock, jid, data, options) => {
     }]
 
     return { message, nodes }
+}
+
+export const executeAlbumMessage = async (sock, jid, medias, options = {}) => {
+    const caption = options.caption || ''
+    const mediaList = medias.map(m => {
+        if (m.type && m.data) {
+            return { [m.type]: m.data,
+                caption: m.caption || '' }
+            } return m
+        }
+    )
+
+    if (mediaList.length < 2) {
+        const item = mediaList[0]
+        const typeKey = item.image ? 'image' : 'video'
+        const content = {[typeKey]: item[typeKey], caption: caption || item.caption || '' }
+        if (typeKey === 'document' || options.contextInfo)
+            return await sock.sendMessage(jid, { ...content, ...options }, { quoted: options.quoted })
+        return await sock.sendMessage(jid, content, { quoted: options.quoted })
+    }
+
+    const imageCount = mediaList.filter(item => item.image).length
+    const videoCount = mediaList.filter(item => item.video).length
+
+    const album = await generateWAMessageFromContent(jid, {
+        albumMessage: {
+            expectedImageCount: imageCount,
+            expectedVideoCount: videoCount,
+            ...(options.quoted ? {
+                contextInfo: {
+                    remoteJid: options.quoted.key.remoteJid,
+                    fromMe: options.quoted.key.fromMe,
+                    stanzaId: options.quoted.key.id,
+                    participant: options.quoted.key.participant || options.quoted.key.remoteJid
+        }
+    } : { contextInfo: {} })
+}
+    }, { userJid: sock.user.id })
+
+    await sock.relayMessage(jid, album.message, { messageId: album.key.id })
+
+    for (let i = 0; i < mediaList.length; i++) {
+        const item = mediaList[i]
+        if (!item.image && !item.video) continue
+        const mediaKey = item.image ? 'image' : 'video'
+        const protoKey = item.image ? 'imageMessage' : 'videoMessage'
+        const prepared = await prepareWAMessageMedia({ [mediaKey]: item[mediaKey] }, { upload: sock.waUploadToServer })
+        const itemCaption = (i === 0 && caption) ? caption : (item.caption || '')
+        if (itemCaption) prepared[protoKey].caption = itemCaption
+
+        const container = await generateWAMessageFromContent(jid, {[protoKey]: prepared[protoKey],
+            messageContextInfo: {
+                messageAssociation: {
+                    associationType: 1,
+                    parentMessageKey: album.key
+                }
+            }
+        }, { userJid: sock.user.id }
+    )
+        await sock.relayMessage(jid, container.message, { messageId: container.key.id })
+        await new Promise(r => setTimeout(r, 500))
+    }
+    return album
 }
