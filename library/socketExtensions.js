@@ -1,4 +1,4 @@
-// ./core/library/socketExtensions.js
+// ./library/socketExtensions.js
 import got from 'got'
 import { Jimp } from 'jimp'
 import axios from 'axios'
@@ -8,8 +8,7 @@ import { imageWebp, videoWebp } from './media/mediaConverter.js'
 import $base from '../core/library/hyperDBAdapter.js'
 
 import { buildCatalog, buildOrder, buildPayment, buildInvoice } from './builders/commerceBuilder.js'
-import { buildLocationMenu, buildInteractiveMenu, buildCards, buildMediaMenu, buildPollSnapshot, buildProductMenu, buildAdMenu } from './builders/interactiveBuilder.js'
-import { buildRichResponse, executeAlbumMessage } from './builders/richBuilder.js'
+import { buildLocationMenu, buildInteractiveMenu, buildCards, buildMediaMenu, buildPollSnapshot, buildProductMenu, buildAdMenu, executeAlbumMessage, buildOrderStatusMenu } from './builders/interactiveBuilder.js'
 import { buildFakeOrder, buildFakePayment, buildFakeInvoice, buildFakeLink, buildFakeCatalog } from './builders/fakeContextBuilder.js'
 
 const generateID = () => 'HK_' + Date.now().toString(36) + Math.random().toString(36).substring(2)
@@ -136,14 +135,15 @@ export default async function (sock) {
         const originalSendMessage = sock.sendMessage
 
         sock.sendMessage = async (jid, content, options = {}) => {
+            // Sanitizador de citados
             if (options.quoted) {
-            if (options.quoted.raw) {
-            options.quoted = options.quoted.raw
-               } else if (!options.quoted.key) {
-                 delete options.quoted
-               }
+                if (options.quoted.raw) {
+                    options.quoted = options.quoted.raw
+                } else if (!options.quoted.key) {
+                    delete options.quoted
+                }
             }
-    
+
             const msgId = options.messageId || generateID()
 
             let globalNodes = []
@@ -159,7 +159,7 @@ export default async function (sock) {
 
             const mergeNodes = (builderNodes) => [...globalNodes, ...(builderNodes || [])]
 
-            // commerce
+            // Commerce
             if (content.invoice) {
                 const { message, nodes } = await buildInvoice(sock, jid, content.invoice, options)
                 return await sock.relayMessage(jid, message, { messageId: msgId, additionalNodes: mergeNodes(nodes) })
@@ -177,7 +177,7 @@ export default async function (sock) {
                 return await sock.relayMessage(jid, message, { messageId: msgId, additionalNodes: mergeNodes(nodes) })
             }
 
-            // interactive ui
+            // Interactive UI
             if (content.locationMenu) {
                 const { message, nodes } = await buildLocationMenu(sock, jid, content.locationMenu, options)
                 return await sock.relayMessage(jid, message, { messageId: msgId, additionalNodes: mergeNodes(nodes) })
@@ -202,10 +202,12 @@ export default async function (sock) {
                 const { message, nodes } = await buildAdMenu(sock, jid, content.adMenu, options)
                 return await sock.relayMessage(jid, message, { messageId: msgId, additionalNodes: mergeNodes(nodes) })
             }
-
-            // rich responses & albums
-            if (content.richResponse) {
-                const { message, nodes } = await buildRichResponse(sock, jid, content.richResponse, options)
+            if (content.productMenu) {
+                const { message, nodes } = await buildProductMenu(sock, jid, content.productMenu, options)
+                return await sock.relayMessage(jid, message, { messageId: msgId, additionalNodes: mergeNodes(nodes) })
+            }
+            if (content.orderStatusMenu) {
+                const { message, nodes } = await buildOrderStatusMenu(sock, jid, content.orderStatusMenu, options)
                 return await sock.relayMessage(jid, message, { messageId: msgId, additionalNodes: mergeNodes(nodes) })
             }
             if (content.pollSnapshot) {
@@ -221,6 +223,7 @@ export default async function (sock) {
             return await originalSendMessage(jid, content, options)
         }
 
+        // Contextos Falsos
         sock.fakeOrder = (jid, opts) => buildFakeOrder(sock, jid, opts)
         sock.fakeCatalog = (jid, data, opts) => buildFakeCatalog(sock, jid, data, opts)
         sock.fakePayment = (jid, opts) => buildFakePayment(sock, jid, opts)
