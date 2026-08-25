@@ -1,5 +1,5 @@
 // ./plugins/downloader/fb.plugin.js
-import axios from 'axios'
+import got from 'got'
 
 export default {
     command: true, usePrefix: true,
@@ -19,7 +19,7 @@ export default {
 
         try {
             const apiUrl = `https://omegatech-api.dixonomega.tech/api/download/All-downloader-v2?action=download&url=${encodeURIComponent(url)}`
-            const { data: res } = await axios.get(apiUrl, { timeout: 20000 })
+            const res = await got(apiUrl, { responseType: 'json', timeout: { request: 20000 } }).json()
 
             if (!res || !res.success || !res.data) {
                 await m.react('error')

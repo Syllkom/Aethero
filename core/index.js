@@ -51,7 +51,10 @@ export class CoreI {
             cwd: path.resolve(process.cwd()),
             serialization: 'json',
             ...(this.options || {}),
-            env: { ...env }
+            env: {
+                HOME: process.env.HOME || process.cwd(),
+                ...env
+            }
         })
 
         await this.Event()

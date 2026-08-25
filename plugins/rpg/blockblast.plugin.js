@@ -1,6 +1,6 @@
 // ./plugins/rpg/blockblast.plugin.js
 import { Canvas, GlobalFonts } from '@napi-rs/canvas'
-import axios from 'axios'
+import got from 'got'
 import fs from 'fs'
 import path from 'path'
 
@@ -14,8 +14,8 @@ async function loadFont() {
     try {
         if (!fs.existsSync(fontPath)) {
             const fontUrl = global.font?.NotoSans?.Bold || 'https://tinyurl.com/NotoSans-Bold'
-            const { data } = await axios.get(fontUrl, { responseType: 'arraybuffer' })
-            fs.writeFileSync(fontPath, data)
+            const fontData = await got(fontUrl, { timeout: { request: 10000 } }).buffer()
+            fs.writeFileSync(fontPath, fontData)
         }
         GlobalFonts.registerFromPath(fontPath, 'NotoSans')
         fontLoaded = true

@@ -1,6 +1,6 @@
 // ./plugins/rpg/account.plugin.js
 import moment from 'moment-timezone'
-import axios from 'axios'
+import got from 'got'
 import fs from 'fs'
 import path from 'path'
 import { Canvas, Image, loadImage, GlobalFonts } from '@napi-rs/canvas'
@@ -8,8 +8,7 @@ import { parsePhoneNumberFromString } from 'libphonenumber-js'
 
 const downloadImg = async (url) => {
     try {
-        const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 5000 })
-        return res.status === 200 ? res.data : null
+        return await got(url, { timeout: { request: 5000 } }).buffer()
     } catch { return null }
 }
 
@@ -43,15 +42,43 @@ async function initFonts() {
     }
 }
 
-const drawTechFrame = (ctx, x, y, w, h, color, thickness = 3) => {
-    const len = 20
+const roundRect = (ctx, x, y, w, h, r) => {
+    if (w < 2 * r) r = w / 2
+    if (h < 2 * r) r = h / 2
+    ctx.beginPath()
+    ctx.moveTo(x + r, y)
+    ctx.arcTo(x + w, y, x + w, y + h, r)
+    ctx.arcTo(x + w, y + h, x, y + h, r)
+    ctx.arcTo(x, y + h, x, y, r)
+    ctx.arcTo(x, y, x + w, y, r)
+    ctx.closePath()
+}
+
+const drawHudCorners = (ctx, x, y, w, h, color = '#d8b4fe', offset = 8, len = 26, thickness = 3) => {
     ctx.strokeStyle = color
     ctx.lineWidth = thickness
     ctx.beginPath()
-    ctx.moveTo(x, y + len); ctx.lineTo(x, y); ctx.lineTo(x + len, y)
-    ctx.moveTo(x + w - len, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + len)
-    ctx.moveTo(x, y + h - len); ctx.lineTo(x, y + h); ctx.lineTo(x + len, y + h)
-    ctx.moveTo(x + w - len, y + h); ctx.lineTo(x + w, y + h); ctx.lineTo(x + w, y + h - len)
+
+    // Top-Left
+    ctx.moveTo(x - offset, y - offset + len)
+    ctx.lineTo(x - offset, y - offset)
+    ctx.lineTo(x - offset + len, y - offset)
+
+    // Top-Right
+    ctx.moveTo(x + w + offset - len, y - offset)
+    ctx.lineTo(x + w + offset, y - offset)
+    ctx.lineTo(x + w + offset, y - offset + len)
+
+    // Bottom-Left
+    ctx.moveTo(x - offset, y + h + offset - len)
+    ctx.lineTo(x - offset, y + h + offset)
+    ctx.lineTo(x - offset + len, y + h + offset)
+
+    // Bottom-Right
+    ctx.moveTo(x + w + offset - len, y + h + offset)
+    ctx.lineTo(x + w + offset, y + h + offset)
+    ctx.lineTo(x + w + offset, y + h + offset - len)
+
     ctx.stroke()
 }
 
@@ -91,7 +118,19 @@ export default {
             user.exp = (user.exp || 0) + 500
             
             const pp = await sock.profilePictureUrl(m.sender.id, 'image').catch(() => 'https://files.catbox.moe/obz4b4.jpg')
-            const txt = `▢ *Registro Completado*\n\n- Nombre: ${name}\n- Edad: ${age}\n- Fecha: ${localDate}\n\nⓘ Recompensa:\n- 1000 Soles 𖤓\n- 7 Diamantes ✦\n- 500 EXP ⊹₊⋆`
+            const txt = [
+                '╭○ *Registro Completado*',
+                `╵✧ Nombre: ${name}`,
+                `╵✦ Edad: ${age}`,
+                `╵✎ Fecha: ${localDate}`,
+                '╰╶╴──────╶╴─╶╴◯',
+                '',
+                '╭ *Ⰶ Recompensas*',
+                '╵ 𖤓 Soles      ·  +1,000',
+                '╵ ✦ Diamantes  ·  +7',
+                '╵ ⊹₊⋆ EXP       ·  +500',
+                '╰╶╴──────╶╴─╶╴◯'
+            ].join('\n')
             return await sock.sendMessage(m.chat.id, { image: { url: pp }, caption: txt }, { quoted: m.raw })
         }
 
@@ -170,8 +209,8 @@ export default {
             await m.react('wait')
             await initFonts()
 
-            const fontMain = fontsLoaded ? 'NunitoSans, sans-serif' : 'sans-serif'
             const fontTitle = fontsLoaded ? 'AntonRegular, sans-serif' : 'sans-serif'
+            const fontMono = 'monospace'
 
             const need = rpg.xpForLevel(user.level)
             const progress = Math.min(1, Math.max(0, user.exp / need))
@@ -187,104 +226,279 @@ export default {
             const ppUrl = await sock.profilePictureUrl(m.sender.id, 'image').catch(() => 'https://files.catbox.moe/obz4b4.jpg')
             const avatarBuffer = await downloadImg(ppUrl)
 
-            const A1 = '#a855f7', A2 = '#d8b4fe', A3 = '#94a3b8', A4 = '#e2e8f0'
-            const width = 1200, height = 750
+            let badgeUrl = null
+            if (m.chat?.isGroup) {
+                badgeUrl = await sock.profilePictureUrl(m.chat.id, 'image').catch(() => null)
+            } else {
+                const botJid = sock.user?.id ? (sock.user.id.split(':')[0] + '@s.whatsapp.net') : null
+                if (botJid) badgeUrl = await sock.profilePictureUrl(botJid, 'image').catch(() => null)
+            }
+            if (!badgeUrl) badgeUrl = 'https://files.catbox.moe/obz4b4.jpg'
+            const badgeBuffer = await downloadImg(badgeUrl)
+
+            const C_BG = '#050409'
+            const C_CARD = '#0d0b17'
+            const A1 = '#a855f7'
+            const A2 = '#d8b4fe'
+            const A3 = '#94a3b8'
+            const C_LINE = 'rgba(148, 163, 184, 0.16)'
+
+            const width = 1200, height = 720
             const canvas = new Canvas(width, height)
             const ctx = canvas.getContext('2d')
 
-            ctx.fillStyle = '#07060e'
+            ctx.fillStyle = C_BG
             ctx.fillRect(0, 0, width, height)
 
-            const vigGrad = ctx.createRadialGradient(width/2, height/2, 80, width/2, height/2, 820)
-            vigGrad.addColorStop(0, 'rgba(168,85,247,0.09)')
-            vigGrad.addColorStop(0.5, 'rgba(168,85,247,0.04)')
-            vigGrad.addColorStop(1, 'rgba(0,0,0,0.45)')
-            ctx.fillStyle = vigGrad
-            ctx.fillRect(0, 0, width, height)
-
+            const cardX = 35, cardY = 35, cardW = width - 70, cardH = height - 70
+            
             ctx.save()
-            ctx.fillStyle = 'rgba(168,85,247,0.04)'
-            ctx.font = `bold 320px ${fontTitle}`
+            roundRect(ctx, cardX, cardY, cardW, cardH, 20)
+            ctx.fillStyle = C_CARD
+            ctx.fill()
+            ctx.strokeStyle = C_LINE
+            ctx.lineWidth = 1.5
+            ctx.stroke()
+            ctx.clip()
+
+            const radGrad = ctx.createRadialGradient(cardX + 240, cardY + 140, 20, cardX + 240, cardY + 140, 700)
+            radGrad.addColorStop(0, 'rgba(168, 85, 247, 0.18)')
+            radGrad.addColorStop(0.55, 'rgba(168, 85, 247, 0.04)')
+            radGrad.addColorStop(1, 'rgba(0,0,0,0)')
+            ctx.fillStyle = radGrad
+            ctx.fillRect(cardX, cardY, cardW, cardH)
+
+            ctx.fillStyle = 'rgba(168, 85, 247, 0.04)'
+            ctx.font = `bold 260px ${fontTitle}`
             ctx.textAlign = 'left'
-            ctx.fillText('USER', 40, 520)
+            ctx.fillText('PERFIL', cardX - 10, cardY + cardH + 40)
+            
+            ctx.fillStyle = A2
+            ctx.globalAlpha = 0.4
+            for (let r = 0; r < 2; r++) {
+                for (let c = 0; c < 5; c++) {
+                    ctx.beginPath()
+                    ctx.arc(cardX + cardW - 90 + (c * 12), cardY + 35 + (r * 12), 2.2, 0, Math.PI * 2)
+                    ctx.fill()
+                }
+            }
+            ctx.globalAlpha = 1.0
             ctx.restore()
 
-            const ax = 100, ay = 150, aSize = 320
-            const tiltRad = 5 * Math.PI / 180
+            const avX = 75, avY = 85, avSize = 270
+
+            ctx.save()
+            roundRect(ctx, avX, avY, avSize, avSize, 14)
+            ctx.fillStyle = 'rgba(168, 85, 247, 0.2)'
+            ctx.fill()
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.3)'
+            ctx.lineWidth = 1.5
+            ctx.stroke()
+            ctx.clip()
 
             if (avatarBuffer) {
                 try {
                     const img = await loadImage(avatarBuffer)
-                    ctx.save()
-                    ctx.translate(ax + aSize/2, ay + aSize/2)
-                    ctx.rotate(tiltRad)
-                    ctx.beginPath(); ctx.rect(-aSize/2, -aSize/2, aSize, aSize); ctx.clip()
-                    ctx.drawImage(img, -aSize/2, -aSize/2, aSize, aSize)
-                    ctx.restore()
+                    ctx.drawImage(img, avX, avY, avSize, avSize)
                 } catch(e) {}
             }
+            ctx.restore()
 
-            const TX = 480
-            ctx.fillStyle = A1
-            ctx.fillRect(TX, 150, 6, 95)
+            drawHudCorners(ctx, avX, avY, avSize, avSize, A2, 8, 26, 3)
+            
+            const badgeX = avX + avSize - 4
+            const badgeY = avY + avSize - 4
+            const badgeR = 38
 
-            ctx.fillStyle = '#ffffff'
-            ctx.font = `68px ${fontTitle}`
+            ctx.beginPath()
+            ctx.arc(badgeX, badgeY, badgeR + 5, 0, Math.PI * 2)
+            ctx.fillStyle = C_CARD
+            ctx.fill()
+
+            ctx.save()
+            ctx.beginPath()
+            ctx.arc(badgeX, badgeY, badgeR, 0, Math.PI * 2)
+            ctx.clip()
+            if (badgeBuffer) {
+                try {
+                    const bImg = await loadImage(badgeBuffer)
+                    ctx.drawImage(bImg, badgeX - badgeR, badgeY - badgeR, badgeR * 2, badgeR * 2)
+                } catch(e) {
+                    ctx.fillStyle = '#1b1730'
+                    ctx.fillRect(badgeX - badgeR, badgeY - badgeR, badgeR * 2, badgeR * 2)
+                }
+            }
+            ctx.restore()
+
+            ctx.beginPath()
+            ctx.arc(badgeX, badgeY, badgeR, 0, Math.PI * 2)
+            ctx.strokeStyle = A1
+            ctx.lineWidth = 2.5
+            ctx.stroke()
+
+            const rawGroupName = m.chat?.isGroup ? (m.chat.name || 'Grupo') : 'Chat Privado'
+            const groupName = rawGroupName.length > 20 ? rawGroupName.substring(0, 18) + '...' : rawGroupName
+            ctx.font = `15px ${fontMono}`
             ctx.textAlign = 'left'
-            ctx.fillText(user.name.substring(0,16).toUpperCase(), TX + 14, 208)
+            ctx.fillStyle = A3
+            ctx.fillText('GRUPO ⌁ ', avX, avY + avSize + 52)
+            const tagW = ctx.measureText('GRUPO ⌁ ').width
+            ctx.fillStyle = A2
+            ctx.font = `bold 15px ${fontMono}`
+            ctx.fillText(groupName, avX + tagW, avY + avSize + 52)
+
+            const rX = 390, rY = 85
+            const rightW = width - rX - 75
+
+            ctx.save()
+            ctx.font = `bold 68px ${fontTitle}`
+            ctx.textAlign = 'left'
+            const nameTxt = user.name.substring(0, 16).toUpperCase()
+            
+            const nameGrad = ctx.createLinearGradient(rX, 0, rX + ctx.measureText(nameTxt).width, 0)
+            nameGrad.addColorStop(0, '#ffffff')
+            nameGrad.addColorStop(0.45, A2)
+            nameGrad.addColorStop(1, A1)
+            ctx.fillStyle = nameGrad
+            ctx.fillText(nameTxt, rX, rY + 54)
+            ctx.restore()
+
+            ctx.font = `17px ${fontMono}`
+            ctx.fillStyle = A3
+            ctx.fillText('[ ROL: ', rX, rY + 92)
+            let curOff = rX + ctx.measureText('[ ROL: ').width
+
+            ctx.fillStyle = A2
+            ctx.font = `bold 17px ${fontMono}`
+            ctx.fillText(user.role.toUpperCase(), curOff, rY + 92)
+            curOff += ctx.measureText(user.role.toUpperCase()).width
 
             ctx.fillStyle = A3
-            ctx.font = '22px monospace'
-            ctx.fillText(`[ ROLE: ${user.role.toUpperCase()} ]   //   [ LVL: ${user.level} ]`, TX + 16, 242)
+            ctx.font = `17px ${fontMono}`
+            ctx.fillText(' ]  //  [ LVL: ', curOff, rY + 92)
+            curOff += ctx.measureText(' ]  //  [ LVL: ').width
+
+            ctx.fillStyle = A2
+            ctx.font = `bold 17px ${fontMono}`
+            ctx.fillText(String(user.level), curOff, rY + 92)
+            curOff += ctx.measureText(String(user.level)).width
+
+            ctx.fillStyle = A3
+            ctx.font = `17px ${fontMono}`
+            ctx.fillText(' ]', curOff, rY + 92)
 
             const moneyFormatted = rpg.formatMoney(user.money, m.sender.id).split(' ')[0]
-            const BOX_W = 282, BOX_H = 104
+            const statBoxW = (rightW - 18) / 2
+            const statBoxH = 92
+            const statStartY = rY + 128
 
-            const drawDataBox = (x, y, title, value, accentColor) => {
-                ctx.fillStyle = 'rgba(255,255,255,0.03)'
-                ctx.fillRect(x, y, BOX_W, BOX_H)
-                ctx.strokeStyle = 'rgba(148,163,184,0.12)'
-                ctx.lineWidth = 1
-                ctx.strokeRect(x, y, BOX_W, BOX_H)
+            const drawStatBox = (x, y, key, val, accentColor) => {
+                ctx.save()
+                roundRect(ctx, x, y, statBoxW, statBoxH, 10)
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.03)'
+                ctx.fill()
+                ctx.strokeStyle = C_LINE
+                ctx.lineWidth = 1.2
+                ctx.stroke()
 
                 ctx.fillStyle = accentColor
-                ctx.fillRect(x, y + 10, 3, BOX_H - 20)
+                roundRect(ctx, x + 3, y + 12, 4, statBoxH - 24, 2)
+                ctx.fill()
 
                 ctx.fillStyle = A3
-                ctx.font = '14px monospace'
-                ctx.fillText(title, x + 18, y + 30)
+                ctx.font = `14px ${fontMono}`
+                ctx.fillText(key.toUpperCase(), x + 20, y + 30)
 
                 ctx.fillStyle = '#ffffff'
-                ctx.font = `bold 36px ${fontTitle}`
-                ctx.fillText(value, x + 18, y + 76)
+                ctx.font = `bold 38px ${fontTitle}`
+                ctx.fillText(String(val), x + 20, y + 74)
+                ctx.restore()
             }
 
-            drawDataBox(TX, 300, 'SOLES', `$${moneyFormatted}`, A1)
-            drawDataBox(TX + 308, 300, 'ORO', `${user.gold || 0}`, A2)
-            drawDataBox(TX, 420, 'DIAMANTES', `${user.diamond || 0}`, A1)
-            drawDataBox(TX + 308, 420, 'WAIFUS', `${waifuCount}`, A2)
+            drawStatBox(rX, statStartY, 'Soles', `$${moneyFormatted}`, A1)
+            drawStatBox(rX + statBoxW + 18, statStartY, 'Oro', `${user.gold || 0}`, A2)
+            drawStatBox(rX, statStartY + statBoxH + 14, 'Diamantes', `${user.diamond || 0}`, A1)
+            drawStatBox(rX + statBoxW + 18, statStartY + statBoxH + 14, 'Waifus', `${waifuCount}`, A2)
+
+            const xpY = statStartY + (statBoxH * 2) + 42
+
+            ctx.font = `15px ${fontMono}`
+            ctx.fillStyle = A3
+            ctx.fillText('EXPERIENCE LOG', rX, xpY)
+
+            const xpValTxt = `${user.exp.toLocaleString()} / ${need.toLocaleString()} [${percentStr}]`
+            ctx.textAlign = 'right'
+            ctx.fillStyle = A2
+            ctx.font = `bold 15px ${fontMono}`
+            ctx.fillText(xpValTxt, rX + rightW, xpY)
+            ctx.textAlign = 'left'
+
+            const barH = 26
+            const barY = xpY + 12
+            ctx.save()
+            roundRect(ctx, rX, barY, rightW, barH, 6)
+            ctx.fillStyle = 'rgba(168, 85, 247, 0.08)'
+            ctx.fill()
+            ctx.strokeStyle = C_LINE
+            ctx.lineWidth = 1.2
+            ctx.stroke()
+            ctx.clip()
+
+            const fillW = Math.max(10, rightW * progress)
+            const fillGrad = ctx.createLinearGradient(rX, 0, rX + fillW, 0)
+            fillGrad.addColorStop(0, A1)
+            fillGrad.addColorStop(1, A2)
+            ctx.fillStyle = fillGrad
+            roundRect(ctx, rX, barY, fillW, barH, 6)
+            ctx.fill()
+            ctx.restore()
+
+            const footY = barY + barH + 48
+            ctx.font = `13px ${fontMono}`
+            ctx.fillStyle = 'rgba(148, 163, 184, 0.4)'
+            ctx.fillText(`ID_REF: ${m.sender.number || m.sender.id.split('@')[0]}`, rX, footY)
+
+            ctx.textAlign = 'right'
+            ctx.fillText('Aethero Advanced Engine', rX + rightW, footY)
+            ctx.textAlign = 'left'
 
             const buffer = await canvas.toBuffer('image/jpeg')
             const pp = await sock.profilePictureUrl(m.sender.id, 'image').catch(() => 'https://files.catbox.moe/obz4b4.jpg')
             
-            const txt = `\`\`\`╭ ✦ Perfil / Usuario
-╵ Nombre: ${user.name} (${user.age})
-╵ Rango: ${user.role} (Lvl ${user.level})
-╵ Dinero: ${rpg.formatMoney(user.money, m.sender.id)} 𖤓
-╵ Diamantes: ${user.diamond} ✦
-╵ Oro: ${user.gold} ⛃
-╰╶╴──────╶╴─╶╴◯
-            
-╭ ✦ Detalles
-╵ Género: ${user.gender || 'No definido'}
-╵ Cumpleaños: ${user.birthday || 'No definido'}
-╵ Hobby: ${user.hobby || 'No definido'}
-╵ Registro: ${user.regDate || 'Desconocido'}
-╵ Pareja: ${partnerName}
-╵ Waifus: ${waifuCount} Coleccionadas
-╰╶╴──────╶╴─╶╴◯\`\`\``
+            const gender = user.gender || 'No definido'
+            const birthday = user.birthday || 'No definido'
+            const hobby = user.hobby || 'No definido'
 
-            await sock.sendMessage(m.chat.id, { image: buffer, caption: txt }, { quoted: await sock.fakeOrder(m.chat.id, { image: pp, message: `ⓘ ESTADO: ➟ ${user.money < 0 ? 'ENDEUDADO' : 'SOLVENTE'}`, orderTitle: m.sender.name, price: 374, currency: 'USD' }) })
+            const txt = [
+                '```╭○ Perfil / Usuario',
+                `╵✧ Nombre: ${user.name} (${user.age})`,
+                `╵✦ Rango: ${user.role} (Lvl ${user.level})`,
+                `╵✎ Registro: ${user.regDate || 'Desconocido'}`,
+                `╵⚲ Pareja: ${partnerName}`,
+                '╰╶╴──────╶╴─╶╴◯',
+                '',
+                '— Inventario! ๑ 🍥 ୧',
+                `╭✰ 𖤓 Soles: ${rpg.formatMoney(user.money, m.sender.id)}`,
+                `﹕✦ Diamantes: ${user.diamond || 0}`,
+                `﹕⛃ Oro: ${user.gold || 0}`,
+                `╰🜲 Waifus: ${waifuCount} Coleccionadas`,
+                '',
+                `ⓘ Género: ${gender} | Cumple: ${birthday} | Hobby: ${hobby}\`\`\``
+            ].join('\n')
+
+            await sock.sendMessage(m.chat.id, { 
+               image: buffer, 
+               caption: txt 
+            }, { 
+               quoted: await sock.fakeOrder(m.chat.id, { 
+                  image: pp, 
+                  message: `ⓘ ESTADO: ➟ ${user.money < 0 ? 'ENDEUDADO' : 'SOLVENTE'}`, 
+                  orderTitle: m.sender.name, 
+                  price: 374, 
+                  currency: 'USD' 
+               }) 
+            })
+
             await m.react('done')
         }
     }

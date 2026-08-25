@@ -7,9 +7,14 @@ const execPromise = util.promisify(exec)
 export default {
     command: true, usePrefix: false,
     case: ['>', '=>', '$'],
-    description: 'Ejecuta código asíncrono (JavaScript) y comandos de consola (Shell).',
+    description: 'Ejecuta código JavaScript asíncrono o comandos Shell (soporta citar archivos o mensajes con código/dumps).',
     category: 'owner',
-    usage: ['> ‹script›', '=> ‹return script›', '$ ‹shell›'],
+    usage: [
+        '> ‹script›',
+        '=> ‹return script›',
+        '$ ‹shell›',
+        '> (citando un archivo .js/documento o mensaje de texto con código)'
+    ],
     script: async (m, { sock, modules }) => {
         if (!m.sender.role('root', 'owner')) return m.sms('owner')
 
@@ -18,8 +23,24 @@ export default {
                 await m.react('wait')
 
                 const isAutoReturn = m.body.startsWith('=>')
-                const codeRaw = m.body.slice(isAutoReturn ? 2 : 1).trim()
-                
+                let codeRaw = m.body.slice(isAutoReturn ? 2 : 1).trim()
+
+                if (!codeRaw && m.quoted) {
+                    if (m.quoted.content?.isMedia) {
+                        const mediaBuffer = await m.getQuotedMedia()
+                        if (mediaBuffer && mediaBuffer.length) {
+                            codeRaw = mediaBuffer.toString('utf-8')
+                        }
+                    } else {
+                        codeRaw = m.getQuotedText()
+                    }
+                }
+
+                if (!codeRaw) {
+                    await m.react('error')
+                    return m.reply('ⓘ No se proporcionó ningún código ni archivo citado para ejecutar.')
+                }
+
                 const code = isAutoReturn ? `return (${codeRaw})` : codeRaw
 
                 const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor
@@ -41,7 +62,24 @@ export default {
             }
             else if (m.body.startsWith('$')) {
                 await m.react('wait')
-                const shellCommand = m.body.slice(1).trim()
+                let shellCommand = m.body.slice(1).trim()
+
+                if (!shellCommand && m.quoted) {
+                    if (m.quoted.content?.isMedia) {
+                        const mediaBuffer = await m.getQuotedMedia()
+                        if (mediaBuffer && mediaBuffer.length) {
+                            shellCommand = mediaBuffer.toString('utf-8')
+                        }
+                    } else {
+                        shellCommand = m.getQuotedText()
+                    }
+                }
+
+                if (!shellCommand) {
+                    await m.react('error')
+                    return m.reply('ⓘ No se proporcionó ningún comando shell.')
+                }
+
                 const { stdout, stderr } = await execPromise(shellCommand)
                 const response = stdout || stderr || 'No output'
                 await m.reply(response.trim())

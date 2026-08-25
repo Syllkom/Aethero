@@ -1,27 +1,56 @@
 // ./plugins/owner/botconfig.plugin.js
+function resolveTargetNumber(m, argIndex = 2) {
+    if (m.quoted?.sender?.number) return m.quoted.sender.number.replace(/\D/g, '')
+    if (m.quoted?.key?.participant) return m.quoted.key.participant.split('@')[0].replace(/\D/g, '')
+    if (m.sender.mentioned && m.sender.mentioned.length > 0) {
+        return m.sender.mentioned[0].split('@')[0].replace(/\D/g, '')
+    }
+    if (m.args[argIndex]) {
+        const raw = m.args[argIndex].replace(/\D/g, '')
+        if (raw.length >= 7) return raw
+    }
+
+    if (!m.chat.isGroup && m.chat.id.endsWith('@s.whatsapp.net')) {
+        return m.chat.id.split('@')[0].replace(/\D/g, '')
+    }
+    return null
+}
+
 export default {
     before: true, priority: 1,
     command: true, usePrefix: true,
     case: ['botconfig', 'bconfig'],
-    description: 'Configura la auto-lectura de mensajes y la notificación de inicio de forma aislada.',
+    description: 'Configura la auto-lectura, notificaciones y el anti-llamadas (Whitelist) del bot.',
     category: 'owner',
-    usage: ['bconfig autoread global on/off', 'bconfig autoread chat on/off', 'bconfig notify on/off'],
+    usage: [
+        'bconfig autoread global on/off', 
+        'bconfig notify on/off', 
+        'bconfig anticall on/off', 
+        'bconfig anticall add ‹número/citar›',
+        'bconfig anticall del ‹número/citar›',
+        'bconfig anticall list'
+    ],
     script: async (m, { sock }) => {
         if (m.botConfigHandled) return
 
-        if (!m.sender.roles.bot && global.db) {
+        if (global.db) {
             try {
                 const botConfig = await global.db.open('@bot_config')
                 const chatConfig = await global.db.open('@chat_config')
 
-                const isGlobalRead = botConfig.autoRead === true
-                const isChatRead = chatConfig[m.chat.id]?.autoRead === true
+                if (botConfig.antiCall !== undefined) global.config.antiCall = botConfig.antiCall
+                if (Array.isArray(botConfig.antiCallWhitelist)) global.config.antiCallWhitelist = botConfig.antiCallWhitelist
 
-                if (isGlobalRead || isChatRead) {
-                    await sock.readMessages([m.raw.key])
+                if (!m.sender.roles.bot) {
+                    const isGlobalRead = botConfig.autoRead === true
+                    const isChatRead = chatConfig[m.chat.id]?.autoRead === true
+
+                    if (isGlobalRead || isChatRead) {
+                        await sock.readMessages([m.raw.key])
+                    }
                 }
             } catch (e) {
-                console.error('[AutoRead Error]', e.message)
+                console.error('[BotConfig Sync Error]', e.message)
             }
         }
 
@@ -72,11 +101,76 @@ export default {
                 }
             }
 
+            if (option === 'anticall' || option === 'call') {
+                const sub = m.args[1]?.toLowerCase()
+                const botConfig = await global.db.open('@bot_config')
+                botConfig.antiCallWhitelist ||= global.config?.antiCallWhitelist || []
+
+                if (sub === 'on' || sub === 'off') {
+                    const isEnable = sub === 'on'
+                    botConfig.antiCall = isEnable
+                    global.config.antiCall = isEnable
+
+                    return m.reply(`✓ Auto-Rechazo de llamadas (AntiCall) establecido en: *${isEnable ? 'ACTIVADO' : 'DESACTIVADO'}*.\n${isEnable ? 'ⓘ Las llamadas de números no autorizados serán cortadas automáticamente.' : 'ⓘ Todas las llamadas timbrarán normalmente en tu teléfono.'}`)
+                }
+
+                if (['add', 'allow', 'permitir', 'whitelist'].includes(sub)) {
+                    const targetNum = resolveTargetNumber(m, 2)
+                    if (!targetNum) {
+                        return m.reply('ⓘ Cita el mensaje del usuario, menciónalo o escribe su número.\n- Ejemplo: _.bconfig anticall add 51932485515_\n- O responde al mensaje con: _.bconfig anticall add_')
+                    }
+
+                    if (!botConfig.antiCallWhitelist.includes(targetNum)) {
+                        botConfig.antiCallWhitelist.push(targetNum)
+                    }
+                    global.config.antiCallWhitelist = botConfig.antiCallWhitelist
+
+                    return m.reply(`✓ El número *+${targetNum}* fue añadido a la lista blanca.\nAhora sus llamadas timbrarán libremente en tu teléfono sin ser cortadas.`)
+                }
+
+                if (['del', 'delete', 'remove', 'quitar', 'bloquear'].includes(sub)) {
+                    const targetNum = resolveTargetNumber(m, 2)
+                    if (!targetNum) {
+                        return m.reply('ⓘ Cita el mensaje del usuario, menciónalo o escribe su número para eliminarlo de la lista blanca.')
+                    }
+
+                    botConfig.antiCallWhitelist = botConfig.antiCallWhitelist.filter(num => num !== targetNum)
+                    global.config.antiCallWhitelist = botConfig.antiCallWhitelist
+
+                    return m.reply(`🗑️ El número *+${targetNum}* fue eliminado de la lista blanca de llamadas.`)
+                }
+
+                if (['list', 'ver', 'ls'].includes(sub)) {
+                    const list = botConfig.antiCallWhitelist
+                    if (!list || !list.length) {
+                        return m.reply(`✆ *Lista Blanca de Llamadas*\n\nⓘ No hay números autorizados registrados.\nEstado AntiCall: *${global.config.antiCall ? 'ACTIVADO' : 'DESACTIVADO'}*`)
+                    }
+
+                    const formattedList = list.map((num, i) => `${i + 1}. +${num}`).join('\n')
+                    return m.reply(`✆ *Números autorizados para llamar (${list.length}):*\n\n${formattedList}\n\nⓘ Estado AntiCall: *${global.config.antiCall ? 'ACTIVADO' : 'DESACTIVADO'}*`)
+                }
+
+                return m.reply(
+                    `╭○ *Ajustes de Anti-Llamadas (AntiCall)*\n` +
+                    `╵ ✦ _.bconfig anticall on/off_ — Activa o desactiva el auto-corte\n` +
+                    `╵ ✦ _.bconfig anticall add [número/citar]_ — Permite que alguien te llame\n` +
+                    `╵ ✦ _.bconfig anticall del [número/citar]_ — Quita a alguien de la lista\n` +
+                    `╵ ✦ _.bconfig anticall list_ — Ver números autorizados\n` +
+                    `╰╶╴──────╶╴─╶╴◯`
+                )
+            }
+
             return m.reply(
-                `▢ *Configuración de Instancia*\n\n` +
-                `- _.bconfig autoread global on/off_ — Auto-lectura de todos los chats\n` +
-                `- _.bconfig autoread chat on/off_ — Auto-lectura de este chat únicamente\n` +
-                `- _.bconfig notify on/off_ — Notificación de encendido al root`
+                `╭○ *Configuración de Instancia (Aethero)*\n\n` +
+                `— *Auto-Lectura de Mensajes:*\n` +
+                `╵ ✧ _.bconfig autoread global on/off_ (Todos los chats)\n` +
+                `╵ ✧ _.bconfig autoread chat on/off_ (Este chat únicamente)\n\n` +
+                `— *Notificación de Inicio:*\n` +
+                `╵ ✧ _.bconfig notify on/off_\n\n` +
+                `— *Gestión de Llamadas (AntiCall):*\n` +
+                `╵ ✧ _.bconfig anticall on/off_\n` +
+                `╵ ✧ _.bconfig anticall add/del/list [número/citar]_\n` +
+                `╰╶╴──────╶╴─╶╴◯`
             )
         }
     }

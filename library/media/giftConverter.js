@@ -1,8 +1,8 @@
-// ./core/library/media/giftConverter.js
+// ./library/media/giftConverter.js
 import fs from 'fs'
 import path from 'path'
 import { spawn } from 'child_process'
-import ff from 'fluent-ffmpeg'
+import ffmpegPath from 'ffmpeg-static'
 
 function randomName(ext) {
     return Math.floor(Math.random() * 10000) + ext
@@ -21,7 +21,7 @@ export async function gifToMp4(buffer) {
     await fs.promises.writeFile(input, buffer)
 
     return new Promise((resolve, reject) => {
-        const ffm = spawn(ff, [
+        const ffm = spawn(ffmpegPath || 'ffmpeg', [
             '-y',
             '-i', input,
             '-movflags', 'faststart',

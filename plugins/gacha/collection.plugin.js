@@ -5,13 +5,15 @@ export default {
     description: 'Muestra tu inventario de personajes y waifus coleccionadas.',
     category: 'gacha',
     usage: 'col [pagina]',
-    script: async (m) => {
+    script: async (m, { sock }) => {
         const db = await global.db.open('@rpg')
         const user = db.users?.[m.sender.id]
         
         if (!user || !user.inventory || user.inventory.length === 0) {
             return m.reply('Tu inventario está vacío. Usa .rw para comenzar.')
         }
+        
+        await m.react('wait')
 
         const inventory = [...user.inventory].sort((a, b) => (b.value || 0) - (a.value || 0))
 
@@ -24,13 +26,14 @@ export default {
         const start = (page - 1) * limit
         const view = inventory.slice(start, start + limit)
         const totalValue = inventory.reduce((acc, curr) => acc + (curr.value || 0), 0)
+        const pp = await sock.profilePictureUrl(m.sender.id, 'image').catch(() => 'https://files.catbox.moe/obz4b4.jpg')
 
         let txt = `╭🜲 *Inventario Gacha*\n`
         txt += `╵ Usuario: ${m.sender.name}\n`
         txt += `╵ Total Items: ${inventory.length}\n`
         txt += `╵ Valor Colección: ${totalValue.toLocaleString()}\n`
-        txt += `╵ Página: ${page}/${totalPages}\n\n`
-        txt += '╰╶╴──────╶╴─╶╴◯'
+        txt += `╵ Página: ${page}/${totalPages}\n`
+        txt += '╰╶╴──────╶╴─╶╴◯\n\n'
 
         view.forEach(char => {
             const rarityIcon = char.rarity === 'LR' ? '🜲' : char.rarity === 'UR' ? '✦' : '◯'
@@ -39,7 +42,17 @@ export default {
         })
 
         if (page < totalPages) txt += `\n> ⓘ Usa .col ${page + 1} para ver más.`
-
-        await m.reply(txt)
+        
+        await sock.sendMessage(m.chat.id, {
+          orderStatusMenu: {
+            image: pp,
+            body: txt,
+            buttons: [
+                  { type: 'order_status', referenceId: 'REF-' + Date.now() }
+            ]
+          }
+        }, { quoted: m.raw })
+        
+        await m.react('done')
     }
 }

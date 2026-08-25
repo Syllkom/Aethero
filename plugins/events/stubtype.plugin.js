@@ -2,7 +2,7 @@
 import { parsePhoneNumberFromString } from 'libphonenumber-js'
 import moment from 'moment-timezone'
 import { Canvas, loadImage, GlobalFonts } from '@napi-rs/canvas'
-import axios from 'axios'
+import got from 'got'
 import fs from 'fs'
 import path from 'path'
 
@@ -42,17 +42,18 @@ async function initFonts() {
     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true })
 
     const fontsToLoad = [
-        { name: 'NotoSansBold', url: global.font.NotoSans.Bold, file: 'NotoSans-Bold.ttf' },
-        { name: 'AntonRegular', url: global.font.Anton.Regular, file: 'Anton-Regular.ttf' },
-        { name: 'NunitoSans', url: global.font.NunitoSans.Bold, file: 'NunitoSans-Bold.ttf' }
+        { name: 'NotoSansBold', url: global.font?.NotoSans?.Bold, file: 'NotoSans-Bold.ttf' },
+        { name: 'AntonRegular', url: global.font?.Anton?.Regular, file: 'Anton-Regular.ttf' },
+        { name: 'NunitoSans', url: global.font?.NunitoSans?.Bold, file: 'NunitoSans-Bold.ttf' }
     ]
 
     try {
         for (const f of fontsToLoad) {
+            if (!f.url) continue
             const fontPath = path.join(tempDir, f.file)
             if (!fs.existsSync(fontPath)) {
-                const res = await axios.get(f.url, { responseType: 'arraybuffer' })
-                fs.writeFileSync(fontPath, res.data)
+                const fontData = await got(f.url, { timeout: { request: 10000 } }).buffer()
+                fs.writeFileSync(fontPath, fontData)
             }
             if (fs.existsSync(fontPath)) GlobalFonts.registerFromPath(fontPath, f.name)
         }
@@ -66,10 +67,48 @@ async function initFonts() {
 
 const downloadImg = async (url) => {
     try {
-        const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 5000 })
-        if (res.status !== 200) return null
-        return res.data
+        return await got(url, { timeout: { request: 5000 } }).buffer()
     } catch { return null }
+}
+
+const roundRect = (ctx, x, y, w, h, r) => {
+    if (w < 2 * r) r = w / 2
+    if (h < 2 * r) r = h / 2
+    ctx.beginPath()
+    ctx.moveTo(x + r, y)
+    ctx.arcTo(x + w, y, x + w, y + h, r)
+    ctx.arcTo(x + w, y + h, x, y + h, r)
+    ctx.arcTo(x, y + h, x, y, r)
+    ctx.arcTo(x, y, x + w, y, r)
+    ctx.closePath()
+}
+
+const drawHudCorners = (ctx, x, y, w, h, color = '#d8b4fe', offset = 7, len = 22, thickness = 2.5) => {
+    ctx.strokeStyle = color
+    ctx.lineWidth = thickness
+    ctx.beginPath()
+
+    // Top-Left
+    ctx.moveTo(x - offset, y - offset + len)
+    ctx.lineTo(x - offset, y - offset)
+    ctx.lineTo(x - offset + len, y - offset)
+
+    // Top-Right
+    ctx.moveTo(x + w + offset - len, y - offset)
+    ctx.lineTo(x + w + offset, y - offset)
+    ctx.lineTo(x + w + offset, y - offset + len)
+
+    // Bottom-Left
+    ctx.moveTo(x - offset, y + h + offset - len)
+    ctx.lineTo(x - offset, y + h + offset)
+    ctx.lineTo(x - offset + len, y + h + offset)
+
+    // Bottom-Right
+    ctx.moveTo(x + w + offset - len, y + h + offset)
+    ctx.lineTo(x + w + offset, y + h + offset)
+    ctx.lineTo(x + w + offset, y + h + offset - len)
+
+    ctx.stroke()
 }
 
 const FALLBACK_IMG = 'https://files.catbox.moe/obz4b4.jpg'
@@ -77,7 +116,7 @@ const eventQueue = new Map()
 
 async function renderAndSendIndividual(user, isWelcome, m, sock, settings, metadata) {
     const { timeZone, countryName } = getUserLocation(user)
-    const date = moment().tz(timeZone).format('DD/MM/YYYY hh:mm A')
+    const date = moment().tz(timeZone).format('DD/MM/YYYY · HH:mm')
     
     const [userPpUrl, groupPpUrl] = await Promise.all([
         sock.profilePictureUrl(user, 'image').catch(() => FALLBACK_IMG),
@@ -90,152 +129,190 @@ async function renderAndSendIndividual(user, isWelcome, m, sock, settings, metad
     ])
 
     await initFonts()
-    const fontMain = fontsLoaded ? 'NunitoSans, sans-serif' : 'sans-serif'
     const fontTitle = fontsLoaded ? 'AntonRegular, sans-serif' : 'sans-serif'
+    const fontMono = 'monospace'
     
-    const width = 1200, height = 500
+    const width = 1200, height = 520
     const canvas = new Canvas(width, height)
     const ctx = canvas.getContext('2d')
 
-    const themeColor = isWelcome ? '#10b981' : '#f43f5e'
-    const sysStatus = isWelcome ? 'CONNECTION_ESTABLISHED' : 'CONNECTION_TERMINATED'
-    const watermark = isWelcome ? 'INBOUND' : 'OUTBOUND'
+    const C_BG = '#050409'
+    const C_CARD = '#0d0b17'
+    const A1 = isWelcome ? '#a855f7' : '#94a3b8'
+    const A2 = isWelcome ? '#d8b4fe' : '#cbd5e1'
+    const A3 = '#94a3b8'
+    const A4 = '#e2e8f0'
+    const C_LINE = 'rgba(148, 163, 184, 0.16)'
 
-    ctx.fillStyle = '#050505'
+    ctx.fillStyle = C_BG
     ctx.fillRect(0, 0, width, height)
 
+    const cardX = 30, cardY = 30, cardW = width - 60, cardH = height - 60
+    
+    ctx.save()
+    roundRect(ctx, cardX, cardY, cardW, cardH, 18)
+    ctx.fillStyle = C_CARD
+    ctx.fill()
+    ctx.strokeStyle = C_LINE
+    ctx.lineWidth = 1.5
+    ctx.stroke()
+    ctx.clip()
+
+    const glowX = isWelcome ? cardX + 180 : cardX + cardW - 180
+    const radGrad = ctx.createRadialGradient(glowX, cardY + 120, 20, glowX, cardY + 120, 500)
+    radGrad.addColorStop(0, isWelcome ? 'rgba(168, 85, 247, 0.16)' : 'rgba(148, 163, 184, 0.12)')
+    radGrad.addColorStop(0.55, isWelcome ? 'rgba(168, 85, 247, 0.03)' : 'rgba(148, 163, 184, 0.02)')
+    radGrad.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = radGrad
+    ctx.fillRect(cardX, cardY, cardW, cardH)
+
+    ctx.fillStyle = isWelcome ? 'rgba(168, 85, 247, 0.035)' : 'rgba(148, 163, 184, 0.04)'
+    ctx.font = `bold 180px ${fontTitle}`
+    if (isWelcome) {
+        ctx.textAlign = 'left'
+        ctx.fillText('WELCOME', cardX - 5, cardY + cardH + 20)
+    } else {
+        ctx.textAlign = 'right'
+        ctx.fillText('BYE', cardX + cardW + 10, cardY + cardH + 20)
+    }
+    ctx.restore()
+
+    const avX = 75, avY = 80, avSize = 220
+
+    ctx.save()
+    roundRect(ctx, avX, avY, avSize, avSize, 12)
+    ctx.fillStyle = 'rgba(168, 85, 247, 0.15)'
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)'
+    ctx.lineWidth = 1.2
+    ctx.stroke()
+    ctx.clip()
+
+    if (userBuff) {
+        try {
+            const uImg = await loadImage(userBuff)
+            ctx.drawImage(uImg, avX, avY, avSize, avSize)
+        } catch(e) {}
+    }
+    ctx.restore()
+
+    drawHudCorners(ctx, avX, avY, avSize, avSize, A2, 7, 22, 2.5)
+
+    const badgeX = avX + avSize - 2
+    const badgeY = avY + avSize - 2
+    const badgeR = 34
+
+    ctx.beginPath()
+    ctx.arc(badgeX, badgeY, badgeR + 4, 0, Math.PI * 2)
+    ctx.fillStyle = C_CARD
+    ctx.fill()
+
+    ctx.save()
+    ctx.beginPath()
+    ctx.arc(badgeX, badgeY, badgeR, 0, Math.PI * 2)
+    ctx.clip()
     if (groupBuff) {
         try {
             const gImg = await loadImage(groupBuff)
-            ctx.save()
-            ctx.globalAlpha = 0.15
-            ctx.beginPath()
-            ctx.moveTo(700, 0)
-            ctx.lineTo(1200, 0)
-            ctx.lineTo(1200, 500)
-            ctx.lineTo(450, 500)
-            ctx.closePath()
-            ctx.clip()
-            ctx.drawImage(gImg, 400, -150, 800, 800)
-            ctx.restore()
-        } catch (e) {}
+            ctx.drawImage(gImg, badgeX - badgeR, badgeY - badgeR, badgeR * 2, badgeR * 2)
+        } catch(e) {
+            ctx.fillStyle = '#1b1730'
+            ctx.fillRect(badgeX - badgeR, badgeY - badgeR, badgeR * 2, badgeR * 2)
+        }
+    } else {
+        ctx.fillStyle = '#1b1730'
+        ctx.fillRect(badgeX - badgeR, badgeY - badgeR, badgeR * 2, badgeR * 2)
     }
-
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)'
-    ctx.lineWidth = 1
-    for (let i = 0; i < width; i += 40) {
-        ctx.beginPath()
-        ctx.moveTo(i, 0)
-        ctx.lineTo(i, height)
-        ctx.stroke()
-    }
-    for (let i = 0; i < height; i += 40) {
-        ctx.beginPath()
-        ctx.moveTo(0, i)
-        ctx.lineTo(width, i)
-        ctx.stroke()
-    }
-
-    ctx.save()
-    ctx.font = `bold 200px ${fontTitle}`
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.015)'
-    ctx.fillText(watermark, 50, 360)
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)'
-    ctx.lineWidth = 2
-    ctx.strokeText(watermark, 50, 360)
     ctx.restore()
 
-    ctx.fillStyle = themeColor
-    ctx.fillRect(0, 0, 12, height)
-    ctx.fillRect(0, 0, 250, 12)
-
-    const ax = 220, ay = 250, aSize = 130
-    
-    ctx.strokeStyle = '#27272a'
-    ctx.lineWidth = 2
     ctx.beginPath()
-    ctx.arc(ax, ay, aSize + 40, 0, Math.PI * 2)
-    ctx.stroke()
-    
-    ctx.strokeStyle = themeColor
-    ctx.setLineDash([15, 10])
-    ctx.lineWidth = 4
-    ctx.beginPath()
-    ctx.arc(ax, ay, aSize + 20, 0, Math.PI * 2)
-    ctx.stroke()
-    ctx.setLineDash([]) 
-
-    ctx.strokeStyle = themeColor
+    ctx.arc(badgeX, badgeY, badgeR, 0, Math.PI * 2)
+    ctx.strokeStyle = A1
     ctx.lineWidth = 2
-    const drawCross = (cx, cy) => {
-        ctx.beginPath()
-        ctx.moveTo(cx, cy - 15)
-        ctx.lineTo(cx, cy + 15)
-        ctx.stroke()
-        ctx.beginPath()
-        ctx.moveTo(cx - 15, cy)
-        ctx.lineTo(cx + 15, cy)
-        ctx.stroke()
-    }
-    drawCross(ax, ay - aSize - 40)
-    drawCross(ax, ay + aSize + 40)
-    drawCross(ax - aSize - 40, ay)
-    drawCross(ax + aSize + 40, ay)
+    ctx.stroke()
 
-    try {
-        const uBuffToUse = userBuff || await downloadImg(FALLBACK_IMG)
-        if (uBuffToUse) {
-            const uImg = await loadImage(uBuffToUse)
-            ctx.save()
-            ctx.beginPath()
-            ctx.arc(ax, ay, aSize, 0, Math.PI * 2)
-            ctx.closePath()
-            ctx.clip()
-            ctx.drawImage(uImg, ax - aSize, ay - aSize, aSize * 2, aSize * 2)
-            ctx.restore()
-        }
-    } catch (e) {}
+    const rawGroupName = metadata.subject || 'Grupo'
+    const groupName = rawGroupName.length > 20 ? rawGroupName.substring(0, 18) + '...' : rawGroupName
+    ctx.font = `14px ${fontMono}`
+    ctx.textAlign = 'left'
+    ctx.fillStyle = A3
+    ctx.fillText('GRUPO ⌁ ', avX, avY + avSize + 48)
+    const tagW = ctx.measureText('GRUPO ⌁ ').width
+    ctx.fillStyle = A2
+    ctx.font = `bold 14px ${fontMono}`
+    ctx.fillText(groupName, avX + tagW, avY + avSize + 48)
 
-    ctx.fillStyle = themeColor
-    ctx.font = `18px monospace`
-    ctx.fillText(`// SYS.PROTOCOL.${sysStatus}`, 440, 120)
+    const rX = 355, rY = 85
+    const rightW = width - rX - 75
+
+    ctx.fillStyle = A1
+    ctx.fillRect(rX, rY + 8, 22, 2)
+    ctx.font = `bold 13px ${fontMono}`
+    ctx.fillText(isWelcome ? 'NUEVO MIEMBRO' : 'MIEMBRO SE RETIRÓ', rX + 32, rY + 14)
+
+    ctx.save()
+    ctx.font = `bold 54px ${fontTitle}`
+    ctx.textAlign = 'left'
+    const titleTxt = isWelcome ? '¡BIENVENID@!' : 'HASTA PRONTO'
+    
+    const titleGrad = ctx.createLinearGradient(rX, 0, rX + ctx.measureText(titleTxt).width, 0)
+    titleGrad.addColorStop(0, '#ffffff')
+    titleGrad.addColorStop(0.55, A2)
+    titleGrad.addColorStop(1, A1)
+    ctx.fillStyle = titleGrad
+    ctx.fillText(titleTxt, rX, rY + 70)
+    ctx.restore()
 
     const userNameText = user.split('@')[0]
+    ctx.font = `bold 26px ${fontTitle}`
+    ctx.fillStyle = A4
+    ctx.fillText(userNameText, rX, rY + 110)
+    const uNameW = ctx.measureText(userNameText).width
+
+    ctx.fillStyle = A2
+    ctx.font = `18px ${fontMono}`
+    ctx.fillText(` @${userNameText}`, rX + uNameW + 8, rY + 108)
+
+    ctx.font = `14px ${fontMono}`
+    ctx.fillStyle = A3
+    const subtitleTxt = isWelcome 
+        ? '// Lee las reglas del grupo con .reglas antes de participar'
+        : '// Gracias por haber sido parte de la aventura'
+    ctx.fillText(subtitleTxt, rX, rY + 148)
+
+    const statBoxY = rY + 175
+    const statBoxW = 240, statBoxH = 75
+
+    ctx.save()
+    roundRect(ctx, rX, statBoxY, statBoxW, statBoxH, 8)
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.025)'
+    ctx.fill()
+    ctx.strokeStyle = C_LINE
+    ctx.lineWidth = 1
+    ctx.stroke()
+
+    ctx.fillStyle = A1
+    roundRect(ctx, rX + 2, statBoxY + 8, 3.5, statBoxH - 16, 2)
+    ctx.fill()
+
+    ctx.fillStyle = A3
+    ctx.font = `11px ${fontMono}`
+    ctx.fillText(isWelcome ? 'POSICIÓN' : 'QUEDAN', rX + 16, statBoxY + 26)
+
     ctx.fillStyle = '#ffffff'
-    ctx.font = `75px ${fontTitle}`
-    ctx.fillText(userNameText.substring(0, 15).toUpperCase(), 435, 195)
+    ctx.font = `bold 26px ${fontTitle}`
+    const statValTxt = isWelcome ? `#${metadata.participants.length}` : `${metadata.participants.length} miembros`
+    ctx.fillText(statValTxt, rX + 16, statBoxY + 60)
+    ctx.restore()
 
-    const drawTechBox = (x, y, w, h, label, val) => {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.02)'
-        ctx.fillRect(x, y, w, h)
-        ctx.strokeStyle = '#27272a'
-        ctx.lineWidth = 1
-        ctx.strokeRect(x, y, w, h)
-        
-        ctx.fillStyle = themeColor
-        ctx.fillRect(x, y, 12, 12) 
+    const footY = height - 50
+    ctx.font = `12px ${fontMono}`
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.4)'
+    ctx.fillText(`${date} · ${countryName}`, cardX + 24, footY)
 
-        ctx.fillStyle = '#71717a'
-        ctx.font = `18px monospace`
-        ctx.fillText(label, x + 25, y + 35)
-
-        ctx.fillStyle = '#ffffff'
-        ctx.font = `28px ${fontMain}`
-        ctx.fillText(val, x + 25, y + 75)
-    }
-
-    drawTechBox(440, 240, 380, 100, 'DESTINATION', metadata.subject.substring(0, 22))
-    drawTechBox(840, 240, 240, 100, 'MEMBER_ID', `#${metadata.participants.length}`)
-    drawTechBox(440, 360, 280, 100, 'ORIGIN_REGION', countryName.substring(0, 16))
-
-    ctx.fillStyle = '#ffffff'
-    for (let i = 0; i < 40; i++) {
-        let bw = Math.random() * 4 + 1
-        ctx.fillRect(750 + (i * 8), 380, bw, 50)
-    }
-    ctx.font = '14px monospace'
-    ctx.fillStyle = '#71717a'
-    ctx.fillText(`UID_${userNameText}_X`, 750, 450)
+    ctx.textAlign = 'right'
+    ctx.fillText('Aethero Advanced Engine', cardX + cardW - 24, footY)
+    ctx.textAlign = 'left'
 
     const bannerBuffer = await canvas.toBuffer('image/jpeg')
 
@@ -243,11 +320,29 @@ async function renderAndSendIndividual(user, isWelcome, m, sock, settings, metad
     const nameFormat = `@${userNameText}`
     
     if (isWelcome) {
-        const defaultWelcome = `*Bienvenido(a)*\n\n ✿ Usuario: {user}\n 𖦹 Grupo: {group}\n ⚲ Región: {country}\n ⌗ Identificador: #{count}\n 𝄜 Fecha: {date}\n\nHola {user}, bienvenido al grupo.`
-        txt = settings.welcomeText || defaultWelcome
+        const defaultWelcome = [
+            '— *Bienvenido(a)!* ๑ 🌸 ୧',
+            '╭✰ Usuario: {user}',
+            '﹕✤ Grupo: {group}',
+            '﹕⚲ Región: {country}',
+            '﹕⌗ Identificador: #{count}',
+            '╰𝄜 Fecha: {date}',
+            '',
+            '👋🏻 Hola {user}, bienvenido al grupo.'
+       ].join('\n')
+       txt = settings.welcomeText || defaultWelcome
     } else {
-        const defaultBye = `*Adiós*\n\n✿ Usuario: {user}\n 𖦹 Grupo: {group}\n ⚲ Región: {country}\n ⌗ Identificador: #{count}\n 𝄜 Salida: {date}\n\n{user} ha dejado el grupo.`
-        txt = settings.byeText || defaultBye
+        const defaultBye = [
+            '— *Adiós!* ๑ 👋 ୧',
+            '╭✰ Usuario: {user}',
+            '﹕✤ Grupo: {group}',
+            '﹕⚲ Región: {country}',
+            '﹕⌗ Identificador: #{count}',
+            '╰𝄜 Salida: {date}',
+            '',
+            '🛫 {user} ha dejado el grupo.'
+       ].join('\n')
+       txt = settings.byeText || defaultBye
     }
 
     txt = txt.replace(/{user}/g, nameFormat)

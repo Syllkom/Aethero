@@ -21,6 +21,21 @@ const RARITY = {
     C:  { min: 0,     name: 'Comun',      emoji: '◯' }
 }
 
+const getDanbooruScraper = () => {
+    const scrapersFolder = global.scraper || global.scrapers
+    if (!scrapersFolder) return null
+
+    if (scrapersFolder.suffixFiles) {
+        for (const [relPath, content] of scrapersFolder.suffixFiles) {
+            if (relPath.toLowerCase().includes('danbooru')) {
+                if (typeof content?.getRandomCharacter === 'function') return content
+                if (content?.default && typeof content.default.getRandomCharacter === 'function') return content.default
+            }
+        }
+    }
+    return null
+}
+
 const getVolumeTier = (count) => {
     if (count >= TIERS.GOD.min) return TIERS.GOD
     if (count >= TIERS.S.min) return TIERS.S
@@ -47,7 +62,7 @@ const resolveTagData = async (tagName) => {
 
     let count = 0
     try {
-        const danbooru = global.scraper?.import('danbooru')
+        const danbooru = getDanbooruScraper()
         if (danbooru?.getTagInfo) {
             const info = await danbooru.getTagInfo(tagName)
             count = info ? info.count : 0
@@ -84,10 +99,13 @@ export default {
         '@gacha': {
             roll: async () => {
                 try {
-                    const danbooru = global.scraper?.import('danbooru')
-                    if (!danbooru?.getRandomCharacter) throw new Error('Scraper no disponible')
+                    const danbooru = getDanbooruScraper()
+                    if (!danbooru?.getRandomCharacter) {
+                        console.error('[Gacha Error] No se encontró la función getRandomCharacter')
+                        return null
+                    }
+
                     const raw = await danbooru.getRandomCharacter('')
-                    
                     if (!raw) return null
 
                     const tagData = await resolveTagData(raw.copyrightTag)
@@ -101,7 +119,8 @@ export default {
                         tierLabel: tagData.tier.label,
                         franchiseVol: tagData.count, isOriginal
                     }
-                } catch {
+                } catch (e) {
+                    console.error('[Gacha Roll Error]', e)
                     return null
                 }
             },
@@ -150,7 +169,7 @@ export default {
             
             getById: async (id) => {
                 try {
-                    const danbooru = global.scraper?.import('danbooru')
+                    const danbooru = getDanbooruScraper()
                     if (!danbooru?.getPost) return null
                     const raw = await danbooru.getPost(id)
                     

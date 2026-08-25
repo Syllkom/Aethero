@@ -1,7 +1,7 @@
 // ./plugins/main/menu.plugin.js
 import path from 'path'
 import fs from 'fs'
-import axios from 'axios'
+import got from 'got'
 import moment from 'moment-timezone'
 import { parsePhoneNumberFromString } from 'libphonenumber-js'
 import { Canvas, Image, loadImage, GlobalFonts } from '@napi-rs/canvas'
@@ -9,11 +9,11 @@ import { inspectPlugins, countTotalCommands } from '../../library/pluginInspecto
 
 const downloadImg = async (url) => {
     try {
-        const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 5000 })
-        if (res.status === 200) return res.data
+        return await got(url, { timeout: { request: 5000 } }).buffer()
     } catch {}
     return null
 }
+
 
 let fontsLoaded = false
 async function loadFonts() {
@@ -30,8 +30,8 @@ async function loadFonts() {
         for (const f of fonts) {
             const fPath = path.join(tempDir, f.file)
             if (!fs.existsSync(fPath)) {
-                const { data } = await axios.get(f.url, { responseType: 'arraybuffer' })
-                fs.writeFileSync(fPath, data)
+                const fontData = await got(f.url, { timeout: { request: 10000 } }).buffer()
+                fs.writeFileSync(fPath, fontData)
             }
             GlobalFonts.registerFromPath(fPath, f.name)
         }
@@ -159,7 +159,7 @@ export default {
 
             let sabias = 'Aethero Advanced Engine'
             try {
-                const { data: datosJson } = await axios.get('https://github.com/Syllkom/MyArchive/raw/refs/heads/main/main/datos.json', { timeout: 4000 })
+                const datosJson = await got('https://github.com/Syllkom/MyArchive/raw/refs/heads/main/main/datos.json', { responseType: 'json', timeout: { request: 5000 } }).json()
                 const arr = Array.isArray(datosJson?.vos_sabiasq) ? datosJson.vos_sabiasq : []
                 if (arr.length > 0) sabias = String(arr[Math.floor(Math.random() * arr.length)] || '').trim()
             } catch {}
@@ -249,7 +249,7 @@ export default {
                 '╰╶╴──────╶╴─╶╴◯```'
             ].join('\n')
 
-            const cats = ['main','grupo','adm','ai','servicio','herramientas','downloader','search','stalk','RPG','fun','anime','gacha','social','nsfw','owner']
+            const cats = ['main','grupo','adm','ai','servicio','herramientas','downloader','search','stalk','RPG','funny','anime','gacha','social','nsfw','owner']
             const sections = []
             for (const cat of cats) {
                 const body = formatCategoryCommands(inspection.items, cat)

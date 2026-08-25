@@ -1,7 +1,7 @@
 // ./plugins/main/ping.plugin.js
 import { performance } from 'perf_hooks'
 import { Canvas, GlobalFonts } from '@napi-rs/canvas'
-import axios from 'axios'
+import got from 'got'
 import fs from 'fs'
 import path from 'path'
 
@@ -21,8 +21,8 @@ async function loadPingFonts() {
             if (!f.url) continue
             const fPath = path.join(tempDir, f.file)
             if (!fs.existsSync(fPath)) {
-                const { data } = await axios.get(f.url, { responseType: 'arraybuffer' })
-                fs.writeFileSync(fPath, data)
+                const fontData = await got(f.url, { timeout: { request: 10000 } }).buffer()
+                fs.writeFileSync(fPath, fontData)
             }
             GlobalFonts.registerFromPath(fPath, f.name)
         }

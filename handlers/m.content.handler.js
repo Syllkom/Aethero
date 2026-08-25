@@ -9,7 +9,7 @@ export default {
         const m = this
 
         const MEDIA_TYPES = new Set([
-            'imageMessage', 'videoMessage', 'audioMessage', 'documentMessage'])
+            'imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage', 'ptvMessage'])
         const isMediaType = (type) => MEDIA_TYPES.has(type) ? true : undefined
         const getText = (type, messageData) => object[type] ? object[type](messageData) : ''
 

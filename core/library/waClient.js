@@ -27,7 +27,7 @@ const CONNECTION = {
     connectTimeoutMs: 60000,
     retryRequestDelayMs: 5000,
     keepAliveIntervalMs: 30000,
-    markOnlineOnConnect: false,
+    markOnlineOnConnect: !!global.config?.alwaysOnline,
     generateHighQualityLinkPreview: true,
     logger: pino({ level: 'silent' }),
     browser: Browsers.ubuntu('Chrome'),
@@ -64,7 +64,8 @@ async function StartBot(object) {
         pino({ level: "fatal" }).child({ level: "fatal" }))
 
     const sockConfig = {
-        ...object.connectOptions
+        ...object.connectOptions,
+        markOnlineOnConnect: Boolean(global.config?.alwaysOnline)
     }
 
     sockConfig.auth = {
@@ -154,12 +155,13 @@ async function StartBot(object) {
         }
 
         if (connection === 'open') {
+            const presence = global.config?.alwaysOnline ? 'available' : 'unavailable'
+            await sock.sendPresenceUpdate(presence).catch(() => {})
+
             const data = {
                 ...sock.user,
-                lid: sock.user.lid.split(":")[0]
-                    + "@lid",
-                id: sock.user.id.split(":")[0]
-                    + "@s.whatsapp.net"
+                lid: sock.user.lid.split(":")[0] + "@lid",
+                id: sock.user.id.split(":")[0] + "@s.whatsapp.net"
             }
             object.events.emit('connection', {
                 type: 'open', data

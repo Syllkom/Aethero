@@ -8,8 +8,13 @@ chalk.level = 2
 
 const env = {}
 for (const key of Object.keys(process.env)) {
-    try { env[key] = JSON.parse(process.env[key]) }
-    catch { env[key] = process.env[key] }
+    try {
+        const parsed = JSON.parse(process.env[key])
+        env[key] = parsed
+        if (typeof parsed === 'string') process.env[key] = parsed
+    } catch {
+        env[key] = process.env[key]
+    }
 }
 
 if (!env.STORAGE) throw new Error('STORAGE missing')
@@ -37,7 +42,7 @@ import '../library/garbageCollector.js'
 import { MakeClient } from './library/waClient.js'
 import { ModuleRegistry } from './library/modules.js'
 import { resolveMessage } from './library/message.js'
-import socketExtensions from '../library/socketExtensions.js'
+import socketExtensions from '../library/socket.extensions.js'
 
 
 // Inicializar DB y Scrapers
@@ -46,6 +51,10 @@ await db.start()
 
 
 const modules = await (new ModuleRegistry(env.MODULEREGISTRY)).start()
+
+global.scraper = modules.getFolder('scrapers')
+global.scrapers = modules.getFolder('scrapers')
+
 const mainFolderName = path.basename(mainModule.folder)
 const mainLogic = modules.getFolder(mainFolderName)
 
@@ -55,29 +64,41 @@ async function StartBot() {
     mainBot.events.on('connection', async (update) => {
         process.send(update)
 
-        if (update.type === 'open' && global.config?.startupNotification && mainBot.sock) {
-            try {
-                const rootNumber = Object.keys(global.config.userRoles || {})[0] || '5216678432366'
-                const rootJid = rootNumber.includes('@') ? rootNumber : rootNumber + '@s.whatsapp.net'
-                const dateStr = new Date().toLocaleString('es-ES', { timeZone: 'America/Lima' })
+        if (update.type === 'restart' || (update.type === 'error' && update.reasonCode === 428)) {
+            console.log(chalk.yellow('ⓘ Conexión caída detectada. Reiniciando cliente...'))
+            return await mainBot.restart()
+        }
 
-                const fakeQ = await mainBot.sock.fakeOrder(rootJid, {
-                    orderId: "AETHERO_V3",
-                    itemCount: 374,
-                    message: "Powered by Syllkom",
-                    orderTitle: "Aethero Store",
-                    price: 374,
-                    currency: "USD"
-                })
+        if (update.type === 'open') {
+            if (mainBot.sock) {
+                const presenceStatus = global.config?.alwaysOnline ? 'available' : 'unavailable'
+                await mainBot.sock.sendPresenceUpdate(presenceStatus).catch(() => {})
+            }
 
-                await mainBot.sock.sendMessage(rootJid, {
-                    adMenu: {
-                        title: "Anuncio de Aethero",
-                        body: `▢ Aethero Conectado\n● Sistema en línea con éxito.\n- Fecha: ${dateStr}\n- PID: ${process.pid}`
-                    }
-                }, { quoted: fakeQ })
-            } catch (err) {
-                console.error('Error al enviar la notificación de inicio:', err.message)
+            if (global.config?.startupNotification && mainBot.sock) {
+                try {
+                    const rootNumber = Object.keys(global.config.userRoles || {})[0] || ''
+                    const rootJid = rootNumber.includes('@') ? rootNumber : rootNumber + '@s.whatsapp.net'
+                    const dateStr = new Date().toLocaleString('es-ES', { timeZone: 'America/Lima' })
+
+                    const fakeQ = await mainBot.sock.fakeOrder(rootJid, {
+                        orderId: "AETHERO_V3",
+                        itemCount: 374,
+                        message: "Powered by Syllkom",
+                        orderTitle: "Aethero Store",
+                        price: 374,
+                        currency: "USD"
+                    })
+
+                    await mainBot.sock.sendMessage(rootJid, {
+                        adMenu: {
+                            title: "Anuncio de Aethero",
+                            body: `▢ Aethero Conectado\n● Sistema en línea con éxito.\n- Fecha: ${dateStr}\n- PID: ${process.pid}`
+                        }
+                    }, { quoted: fakeQ })
+                } catch (err) {
+                    console.error('Error al enviar la notificación de inicio:', err.message)
+                }
             }
         }
     })
@@ -86,6 +107,14 @@ async function StartBot() {
         folderPath: path.join(env.STORAGE, 'creds'),
         ...env.connOptions
     })
+
+    const presenceStatus = global.config?.alwaysOnline ? 'available' : 'unavailable'
+    await sock.sendPresenceUpdate(presenceStatus).catch(() => {})
+
+    sock.plugins = modules.getFolder('plugins')
+    sock.modules = modules
+
+    await socketExtensions(sock)
 
     sock.plugins = modules.getFolder('plugins')
     sock.modules = modules
@@ -165,10 +194,24 @@ async function StartBot() {
     })
 
     sock.ev.on('call', async (call) => {
+        if (!global.config?.antiCall) return
+
         const callInfo = call[0]
-        if (callInfo.status === 'offer') {
-            await sock.rejectCall(callInfo.id, callInfo.from)
+        if (!callInfo || callInfo.status !== 'offer') return
+
+        const caller = callInfo.from || ''
+        const whitelist = global.config?.antiCallWhitelist || []
+
+        const isWhitelisted = whitelist.some(num => {
+            const cleanNum = num.replace(/\D/g, '')
+            return caller.includes(cleanNum)
+        })
+
+        if (isWhitelisted) {
+            return console.log(`✆ [Llamada Permitida] De: ${caller}`)
         }
+
+        await sock.rejectCall(callInfo.id, callInfo.from)
     })
 }
 

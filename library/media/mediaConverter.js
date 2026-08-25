@@ -1,31 +1,46 @@
-// ./core/library/media/mediaConverter.js
+// ./library/media/mediaConverter.js
 import ff from 'fluent-ffmpeg'
+import ffmpegStatic from 'ffmpeg-static'
 import webp from 'node-webpmux'
 import fs from 'fs'
 import path from 'path'
+import { Canvas, loadImage } from '@napi-rs/canvas'
 
-async function bufferToWebp(mediaBuffer, isVideo = false) {
+if (ffmpegStatic && fs.existsSync(ffmpegStatic)) {
+    ff.setFfmpegPath(ffmpegStatic)
+}
+
+async function imageBufferToWebp(mediaBuffer) {
+    const img = await loadImage(mediaBuffer)
+    const canvas = new Canvas(512, 512)
+    const ctx = canvas.getContext('2d')
+
+    const scale = Math.min(512 / img.width, 512 / img.height)
+    const w = img.width * scale
+    const h = img.height * scale
+    const x = (512 - w) / 2
+    const y = (512 - h) / 2
+
+    ctx.drawImage(img, x, y, w, h)
+    return await canvas.toBuffer('image/webp')
+}
+
+async function videoBufferToWebp(mediaBuffer) {
     return new Promise((resolve, reject) => {
-        const tempInputFile = path.join(process.cwd(), 'storage', 'temp', `temp_in_${Date.now()}${isVideo ? '.mp4' : '.jpg'}`)
-        const tempOutputFile = path.join(process.cwd(), 'storage', 'temp', `temp_out_${Date.now()}.webp`)
-
-        const tempDir = path.dirname(tempInputFile)
+        const tempDir = path.join(process.cwd(), 'storage', 'temp')
         if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true })
+
+        const tempInputFile = path.join(tempDir, `temp_in_${Date.now()}.mp4`)
+        const tempOutputFile = path.join(tempDir, `temp_out_${Date.now()}.webp`)
 
         fs.writeFileSync(tempInputFile, mediaBuffer)
 
-        const videoFilter = isVideo
-            ? 'scale=512:512:force_original_aspect_ratio=decrease,fps=15,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=#00000000'
-            : 'scale=512:512:force_original_aspect_ratio=decrease,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=#00000000'
+        const videoFilter = 'scale=512:512:force_original_aspect_ratio=decrease,fps=15,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=#00000000'
 
-        let command = ff(tempInputFile)
+        ff(tempInputFile)
             .outputOptions([
                 '-vcodec', 'libwebp',
-                '-vf', videoFilter
-            ])
-
-        if (isVideo) {
-            command.outputOptions([
+                '-vf', videoFilter,
                 '-loop', '0',
                 '-ss', '00:00:00',
                 '-t', '00:00:05',
@@ -33,19 +48,21 @@ async function bufferToWebp(mediaBuffer, isVideo = false) {
                 '-an',
                 '-vsync', '0'
             ])
-        }
-
-        command
             .toFormat('webp')
             .on('error', (err) => {
                 if (fs.existsSync(tempInputFile)) fs.unlinkSync(tempInputFile)
+                if (fs.existsSync(tempOutputFile)) fs.unlinkSync(tempOutputFile)
                 reject(err)
             })
             .on('end', () => {
-                const outputBuffer = fs.readFileSync(tempOutputFile)
-                if (fs.existsSync(tempInputFile)) fs.unlinkSync(tempInputFile)
-                if (fs.existsSync(tempOutputFile)) fs.unlinkSync(tempOutputFile)
-                resolve(outputBuffer)
+                try {
+                    const outputBuffer = fs.readFileSync(tempOutputFile)
+                    if (fs.existsSync(tempInputFile)) fs.unlinkSync(tempInputFile)
+                    if (fs.existsSync(tempOutputFile)) fs.unlinkSync(tempOutputFile)
+                    resolve(outputBuffer)
+                } catch (e) {
+                    reject(e)
+                }
             })
             .save(tempOutputFile)
     })
@@ -53,10 +70,12 @@ async function bufferToWebp(mediaBuffer, isVideo = false) {
 
 async function writeExif(mediaBuffer, metadata = {}, isVideo = false) {
     try {
-        const webpBuffer = await bufferToWebp(mediaBuffer, isVideo)
+        const webpBuffer = isVideo 
+            ? await videoBufferToWebp(mediaBuffer) 
+            : await imageBufferToWebp(mediaBuffer)
 
-        const packname = metadata.packname || 'Aethero'
-        const author = metadata.author || 'Engine'
+        const packname = metadata.packname ?? 'Aethero'
+        const author = metadata.author ?? 'Engine'
         const categories = metadata.categories || ['🤖']
 
         const img = new webp.Image()
@@ -88,8 +107,8 @@ async function writeExif(mediaBuffer, metadata = {}, isVideo = false) {
 
 async function stickerWebp(stickerBuffer, metadata = {}) {
     try {
-        const packname = metadata.packname || 'Aethero'
-        const author = metadata.author || 'Engine'
+        const packname = metadata.packname ?? 'Aethero'
+        const author = metadata.author ?? 'Engine'
         const categories = metadata.categories || ['🤖']
 
         const img = new webp.Image()

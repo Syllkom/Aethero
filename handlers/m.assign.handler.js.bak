@@ -35,13 +35,6 @@ export default {
                 const quotedObj = m.raw ? { quoted: m.raw } : {}
                 const finalOptions = { ...quotedObj, ...options }
 
-                await new Promise(resolve => setTimeout(resolve, typingDelay))
-                await sock.sendPresenceUpdate('paused', m.chat.id)
-
-                if (!global.config?.alwaysOnline) {
-                    await sock.sendPresenceUpdate('unavailable').catch(() => {})
-                }
-
                 if (typeof text === 'string') {
                     const mentionedJid = (text.match(/@(\d{0,16})/g) || []).map(v => v.slice(1) + '@lid')
                     return await sock.sendMessage(m.chat.id, { text, contextInfo: { mentionedJid } }, finalOptions)

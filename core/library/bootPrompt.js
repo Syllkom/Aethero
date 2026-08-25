@@ -64,7 +64,7 @@ export const printNeofetch = () => {
     } catch (e) {}
 
     const pluginsCount = countFiles(path.resolve('./plugins'))
-    const scrapersCount = countFiles(path.resolve('./scrapers'))
+    const scrapersCount = countFiles(path.resolve('./library/scrapers'))
 
     const osType = os.type() === 'Linux' ? 'GNU/Linux' : os.type()
     const osArch = os.arch()

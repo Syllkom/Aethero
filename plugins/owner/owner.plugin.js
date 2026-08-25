@@ -3,7 +3,7 @@ export default {
     command: true, usePrefix: true,
     case: ['owner', 'deowner', 'setowner', 'unsetowner'],
     description: 'Otorga o revoca el rol de owner a un usuario',
-    category: 'admin',
+    category: 'owner',
     usage: 'owner/deowner ‹@usuario›',
     async script(m) {
         if (!m.sender.role('root')) {

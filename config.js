@@ -10,6 +10,10 @@ import base from './core/library/hyperDBAdapter.js'
 global.db = base
 
 global.googleApiKey = process.env.GOOGLE_API_KEY || ''
+global.danbooru = {
+    login: process.env.DANBOORU_LOGIN || '',
+    apiKey: process.env.DANBOORU_API_KEY || ''
+}
 
 global.readMore = String
     .fromCharCode(8206)
@@ -30,11 +34,16 @@ global.config = {
     saveHistory: true,
     autoRead: false,
     silentConsole: true,
-    startupNotification: false
+    startupNotification: false,
+    alwaysOnline: false,
+    antiCall: true,
+    antiCallWhitelist: [
+        ""
+    ]
 }
 
 global.config.userRoles = {
-    "447342719758": {
+    "79282794949": {
         root: true,
         owner: true,
         mod: true,

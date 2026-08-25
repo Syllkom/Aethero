@@ -44,6 +44,13 @@ export default {
                 })
             }
         } catch (e) {
+            const is428 = e?.output?.statusCode === 428 
+                || e?.output?.payload?.statusCode === 428 
+                || e?.message?.includes('Connection Closed') 
+                || e?.message?.includes('Precondition Required')
+
+            if (is428) throw e
+
             console.error('Plugin Execution Error:', e)
             return
         }

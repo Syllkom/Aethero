@@ -1,29 +1,93 @@
 // ./plugins/owner/dump.plugin.js
-import { proto } from '@whiskeysockets/baileys'
+function unwrapMessage(msg) {
+    let current = msg || {}
+    while (
+        current.ephemeralMessage ||
+        current.viewOnceMessage ||
+        current.viewOnceMessageV2 ||
+        current.viewOnceMessageV2Extension ||
+        current.documentWithCaptionMessage ||
+        current.editedMessage ||
+        (current.pollCreationMessageV4 && current.pollCreationMessageV4.message) ||
+        (current.pollCreationMessageV5 && current.pollCreationMessageV5.message)
+    ) {
+        if (current.ephemeralMessage) current = current.ephemeralMessage.message || {}
+        else if (current.viewOnceMessage) current = current.viewOnceMessage.message || {}
+        else if (current.viewOnceMessageV2) current = current.viewOnceMessageV2.message || {}
+        else if (current.viewOnceMessageV2Extension) current = current.viewOnceMessageV2Extension.message || {}
+        else if (current.documentWithCaptionMessage) current = current.documentWithCaptionMessage.message || {}
+        else if (current.editedMessage) current = current.editedMessage.message?.protocolMessage?.editedMessage || {}
+        else if (current.pollCreationMessageV4?.message) current = current.pollCreationMessageV4.message
+        else if (current.pollCreationMessageV5?.message) current = current.pollCreationMessageV5.message
+    }
+    return current
+}
 
-function detectAdditionalNodes(rawJson) {
+function getMessageAssociation(rawMsg) {
+    const m = rawMsg?.message || rawMsg || {}
+    const unwrapped = unwrapMessage(m)
+    
+    return m.messageContextInfo?.messageAssociation
+        || m.ephemeralMessage?.message?.messageContextInfo?.messageAssociation
+        || unwrapped.messageContextInfo?.messageAssociation
+        || unwrapped.imageMessage?.contextInfo?.messageAssociation
+        || unwrapped.videoMessage?.contextInfo?.messageAssociation
+        || unwrapped.pollCreationOptionImageMessage?.messageContextInfo?.messageAssociation
+        || null
+}
+
+function detectAdditionalNodes(obj) {
+    const rawJson = typeof obj === 'string' ? obj : JSON.stringify(obj)
     const has = (s) => rawJson.includes(s)
 
+    if (has('"pollCreationOptionImageMessage"') || has('"media_poll"')) {
+        return {
+            additionalNodes: [
+                {
+                    tag: "meta",
+                    attrs: {
+                        message_association_type: "media_poll"
+                    }
+                }
+            ]
+        }
+    }
+
+    if (has('"pollCreationMessage"') || has('"pollCreationMessageV3"') || has('"pollCreationMessageV4"') || has('"pollCreationMessageV5"')) {
+        const isImagePoll = has('"pollContentType": 2') || has('"pollContentType":2')
+        return {
+            additionalNodes: [
+                {
+                    tag: "meta",
+                    attrs: {
+                        polltype: "creation",
+                        ...(isImagePoll ? { contenttype: "image" } : {})
+                    }
+                }
+            ]
+        }
+    }
+
     if (has('"botAIMessage"') || has('"aiChatMessage"') || has('"forwardedAiBotMessageInfo"')) {
-        return JSON.stringify({
+        return {
             additionalNodes: [
                 { attrs: { biz_bot: "1" }, tag: "bot" },
                 { attrs: {}, tag: "biz" }
             ]
-        }, null, 2)
+        }
     }
 
     if (has('"interactiveMessage"') || has('"buttonsMessage"') || has('"nativeFlowMessage"')) {
         if (has('"catalog_message"')) {
-            return JSON.stringify({ additionalNodes: [{ tag: "biz", attrs: { native_flow_name: "catalog_message" } }] }, null, 2)
+            return { additionalNodes: [{ tag: "biz", attrs: { native_flow_name: "catalog_message" } }] }
         }
         if (has('"order_details"')) {
-            return JSON.stringify({ additionalNodes: [{ tag: "biz", attrs: { native_flow_name: "order_details" } }] }, null, 2)
+            return { additionalNodes: [{ tag: "biz", attrs: { native_flow_name: "order_details" } }] }
         }
         if (has('"payment_key_info"')) {
-            return JSON.stringify({ additionalNodes: [{ tag: "biz", attrs: {}, content: [{ tag: "interactive", attrs: { type: "native_flow", v: "1" }, content: [{ tag: "native_flow", attrs: { name: "payment_key_info" } }] }] }] }, null, 2)
+            return { additionalNodes: [{ tag: "biz", attrs: {}, content: [{ tag: "interactive", attrs: { type: "native_flow", v: "1" }, content: [{ tag: "native_flow", attrs: { name: "payment_key_info" } }] }] }] }
         }
-        return JSON.stringify({
+        return {
             additionalNodes: [
                 {
                     tag: "biz",
@@ -39,123 +103,176 @@ function detectAdditionalNodes(rawJson) {
                     ]
                 }
             ]
-        }, null, 2)
+        }
     }
 
-    if (has('"pollCreationMessage"') || has('"pollCreationMessageV3"')) {
-        return JSON.stringify({ additionalNodes: [{ tag: "meta", attrs: { polltype: "creation" } }] }, null, 2)
-    }
+    return {}
+}
 
-    return "{}"
+function cleanPOJO(obj) {
+    if (obj === null || obj === undefined) return obj
+    if (Buffer.isBuffer(obj) || obj instanceof Uint8Array) {
+        return `__BUFFER_START__${Buffer.from(obj).toString('base64')}__BUFFER_END__`
+    }
+    if (obj.type === 'Buffer' && Array.isArray(obj.data)) {
+        return `__BUFFER_START__${Buffer.from(obj.data).toString('base64')}__BUFFER_END__`
+    }
+    if (Array.isArray(obj)) return obj.map(cleanPOJO)
+    if (typeof obj === 'object') {
+        if (typeof obj.toNumber === 'function' || (obj.low !== undefined && obj.high !== undefined)) return obj.toString()
+        const res = {}
+        for (const key of Object.keys(obj)) {
+            if (typeof obj[key] === 'function' || key === 'toJSON' || key === 'constructor') continue
+            res[key] = cleanPOJO(obj[key])
+        }
+        return res
+    }
+    return obj
+}
+
+function formatJsonCode(obj) {
+    let str = JSON.stringify(cleanPOJO(obj), null, 2)
+    str = str.replace(/"__BUFFER_START__(.*?)__BUFFER_END__"/g, 'Buffer.from("$1", "base64")')
+    return str
 }
 
 export default {
     command: true, usePrefix: true,
     case: ['dump', 'json', 'crm'],
-    description: 'Destripa mensajes citados extrayendo su Protobuf limpio y genera código de retransmisión.',
+    description: 'Destripa paquetes simples o compuestos (Álbumes, Encuestas con imagen, Botones).',
     category: 'owner',
-    usage: 'dump',
+    usage: ['dump'],
     script: async (m, { sock }) => {
         if (!m.sender.role('root', 'owner')) return m.sms('owner')
-        if (!m.quoted) return m.reply('ⓘ Cita el mensaje que quieres destripar.')
+        if (!m.quoted) return m.reply('ⓘ Cita el mensaje que deseas destripar.')
 
         await m.react('wait')
 
         try {
-            const getPayload = (obj) => {
-                if (!obj) return null
-                if (obj.message?.message) return obj.message.message
-                if (obj.message && !obj.key) return obj.message
-                if (obj.buttonsMessage || obj.interactiveMessage || obj.imageMessage || obj.conversation) return obj
-                return obj.message || obj
+            const quotedId = m.quoted.id
+            const chatJid = m.chat.id
+
+            const chatIndex = await global.db.open('@history/' + chatJid)
+            const senders = [...new Set(Object.values(chatIndex || {}))]
+
+            let allChatMessages = []
+            for (const s of senders) {
+                const hist = await global.db.open('@history/' + chatJid + '/' + s)
+                if (Array.isArray(hist.data)) allChatMessages.push(...hist.data)
             }
 
-            const loadedMsg = await sock.loadMessage(m.chat.id, m.quoted.id)
-            const targetContent = getPayload(loadedMsg) || getPayload(m.quoted)
+            const directAssoc = getMessageAssociation(m.quoted.raw || m.quoted)
+            let rootParentId = directAssoc?.parentMessageKey?.id || quotedId
 
-            if (!targetContent || Object.keys(targetContent).length === 0) {
-                await m.react('error')
-                return m.reply('ⓘ No se pudo extraer el cuerpo binario del mensaje citado.')
-            }
+            let parentMsgRaw = allChatMessages.find(msg => msg.key?.id === rootParentId) || (rootParentId === quotedId ? m.quoted.raw : null)
+            
+            let childMsgs = allChatMessages.filter(msg => {
+                const assoc = getMessageAssociation(msg)
+                return assoc?.parentMessageKey?.id === rootParentId
+            })
 
-            const toPOJO = (obj) => {
-                if (obj === null || obj === undefined) return obj
-                if (Buffer.isBuffer(obj) || obj instanceof Uint8Array) return Buffer.from(obj).toString('base64')
-                if (obj.type === 'Buffer' && Array.isArray(obj.data)) return Buffer.from(obj.data).toString('base64')
-                if (Array.isArray(obj)) return obj.map(toPOJO)
-                if (typeof obj === 'object') {
-                    if (typeof obj.toNumber === 'function' || (obj.low !== undefined && obj.high !== undefined)) return obj.toString()
-                    const res = {}
-                    for (const key of Object.keys(obj)) {
-                        if (typeof obj[key] === 'function' || key === 'toJSON' || key === 'constructor') continue
-                        res[key] = toPOJO(obj[key])
-                    }
-                    return res
+            let rawParentContent = parentMsgRaw?.message || m.quoted.raw?.message || m.quoted.message || {}
+            let parentPayload = unwrapMessage(rawParentContent)
+
+            if (parentPayload.pollCreationMessageV3) {
+                parentPayload = {
+                    ...(rawParentContent.messageContextInfo ? { messageContextInfo: rawParentContent.messageContextInfo } : {}),
+                    pollCreationMessageV3: parentPayload.pollCreationMessageV3
                 }
-                return obj
             }
 
-            const safeContent = toPOJO(targetContent)
-            let cleanObj = safeContent
+            if (childMsgs.length > 0) {
+                const parentType = Object.keys(parentPayload || {})[0] || 'pollCreationMessageV3'
+                const parentNodes = detectAdditionalNodes(parentPayload)
+                const parentJson = formatJsonCode(parentPayload)
 
-            try {
-                const protoMsg = proto.Message.fromObject(targetContent)
-                const decoded = proto.Message.toObject(protoMsg, {
-                    enums: Number,
-                    longs: String,
-                    bytes: String,
-                    defaults: false
+                let jsScript = `// Aethero Engine - Multi-part Packet Dump\n`
+                jsScript += `// Tipo Padre  : ${parentType}\n`
+                jsScript += `// Elementos   : ${childMsgs.length} opciones/fotos enlazadas\n`
+                jsScript += `// ID Padre    : ${rootParentId}\n`
+                jsScript += `// Timestamp   : ${new Date().toLocaleString("es-ES", { timeZone: "America/Lima" })}\n\n`
+
+                jsScript += `const newParentId = await sock.relayMessage(\n  m.chat,\n  ${parentJson},\n  ${JSON.stringify(parentNodes, null, 2)}\n);\n\n`
+
+                childMsgs.forEach((child, index) => {
+                    const unwrappedChild = unwrapMessage(child.message || child)
+                    const childAssoc = getMessageAssociation(child)
+                    const childNodes = detectAdditionalNodes(unwrappedChild)
+
+                    let childStructure = {}
+
+                    if (unwrappedChild.pollCreationOptionImageMessage) {
+                        childStructure = {
+                            messageContextInfo: {
+                                messageAssociation: {
+                                    associationType: childAssoc?.associationType || 7,
+                                    parentMessageKey: {
+                                        remoteJid: '__CHAT_VAR__',
+                                        fromMe: true,
+                                        id: '__PARENT_VAR__'
+                                    }
+                                }
+                            },
+                            pollCreationOptionImageMessage: unwrappedChild.pollCreationOptionImageMessage
+                        }
+                    } else if (unwrappedChild.imageMessage || unwrappedChild.videoMessage) {
+                        const mediaType = unwrappedChild.imageMessage ? 'imageMessage' : 'videoMessage'
+                        childStructure = {
+                            [mediaType]: unwrappedChild[mediaType],
+                            messageContextInfo: {
+                                messageAssociation: {
+                                    associationType: childAssoc?.associationType || 1,
+                                    parentMessageKey: {
+                                        remoteJid: '__CHAT_VAR__',
+                                        fromMe: true,
+                                        id: '__PARENT_VAR__'
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        childStructure = unwrappedChild
+                    }
+
+                    let childJson = formatJsonCode(childStructure)
+                    childJson = childJson.replace(/"__PARENT_VAR__"/g, 'newParentId')
+                    childJson = childJson.replace(/"__CHAT_VAR__"/g, 'm.chat')
+
+                    jsScript += `const id_${index} = await sock.relayMessage(\n  m.chat,\n  ${childJson},\n  ${JSON.stringify(childNodes, null, 2)}\n);\n\n`
                 })
 
-                const deepMerge = (target, source) => {
-                    for (const key in source) {
-                        if (source[key] === null || source[key] === undefined) continue
-                        if (typeof source[key] === 'object' && !Array.isArray(source[key])) {
-                            target[key] = target[key] || {}
-                            deepMerge(target[key], source[key])
-                        } else if (target[key] === undefined) {
-                            target[key] = source[key]
-                        }
-                    }
-                    return target
-                }
+                jsScript += `return newParentId;\n`
 
-                cleanObj = deepMerge(decoded, safeContent)
-            } catch (e) {
-                console.log('[Dump] Protobuf fallback:', e.message)
+                const fileBuffer = Buffer.from(jsScript, 'utf-8')
+                const fileName = `dump_${parentType}_multipack_${Date.now()}.js`
+
+                await sock.sendMessage(m.chat.id, {
+                    document: fileBuffer,
+                    fileName: fileName,
+                    mimetype: 'application/javascript',
+                    caption: `- *Tipo:* ${parentType} (Multi-Part)\n- *Opciones con imagen:* ${childMsgs.length}\n- *ID:* \`${rootParentId}\`\n- *Archivo:* \`${fileName}\``
+                }, { quoted: m.raw })
+
+                return await m.react('done')
             }
 
-            const rawJson = JSON.stringify(cleanObj, null, 2)
-            const cleanJson = rawJson.replace(/\\n/g, '\\n')
+            const singlePayload = parentPayload
+            const typeName = Object.keys(singlePayload || {}).find(k => !['messageContextInfo', 'senderKeyDistributionMessage'].includes(k)) || m.quoted.type || 'unknown'
+            const senderName = m.quoted.sender?.name || m.quoted.sender?.number || 'Desconocido'
 
-            const ignoreKeys = ['messageContextInfo', 'senderKeyDistributionMessage', 'inviteLinkGroupTypeV2']
-            const realTypeKey = Object.keys(cleanObj).find(k => !ignoreKeys.includes(k))
+            const singleNodes = detectAdditionalNodes(singlePayload)
+            const singleJson = formatJsonCode(singlePayload)
 
-            const typeName = realTypeKey || m.quoted.type || "unknown"
-            const senderName = m.quoted.sender?.name || m.quoted.sender?.number || "Desconocido"
-            const ts = new Date().toLocaleString("es-ES", { timeZone: "America/Lima" })
+            const jsContent = `// Aethero Engine - Packet Dump\n// Tipo      : ${typeName}\n// Emisor    : ${senderName}\n// ID        : ${m.quoted.id}\n// Timestamp : ${new Date().toLocaleString("es-ES", { timeZone: "America/Lima" })}\n\nawait sock.relayMessage(\n  m.chat.id,\n  ${singleJson},\n  ${JSON.stringify(singleNodes, null, 2)}\n)`
 
-            const relayOptsStr = detectAdditionalNodes(rawJson)
-            const jsContent = `await sock.relayMessage(\n  m.chat.id,\n  ${cleanJson},\n  ${relayOptsStr}\n)`
-
-            const headerInfo = [
-                "// Información del Paquete",
-                `// Tipo       : ${typeName}`,
-                `// Emisor     : ${senderName}`,
-                `// ID         : ${m.quoted.id}`,
-                `// Timestamp  : ${ts}`
-            ].join("\n")
+            const fileBuffer = Buffer.from(jsContent, 'utf-8')
+            const fileName = `dump_${typeName}_${Date.now()}.js`
 
             await sock.sendMessage(m.chat.id, {
-                richResponse: {
-                    styleClassic: true,
-                    normalText: headerInfo,
-                    code: {
-                        language: "javascript",
-                        code: jsContent
-                    },
-                    footer: "Aethero Advanced Engine | Destripador de Protocolos"
-                }
+                document: fileBuffer,
+                fileName: fileName,
+                mimetype: 'application/javascript',
+                caption: `- *Tipo:* ${typeName}\n- *Emisor:* ${senderName}\n- *ID:* \`${m.quoted.id}\`\n- *Archivo:* \`${fileName}\``
             }, { quoted: m.raw })
 
             await m.react('done')

@@ -1,11 +1,19 @@
-import axios from 'axios'
+// ./library/scrapers/tools/danbooru.scraper.js
+import got from 'got'
 
 const BASE_URL = 'https://danbooru.donmai.us/posts.json'
 const TAG_URL = 'https://danbooru.donmai.us/tags.json'
 
 const HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (compatible; HorekuOs/2.0; +http://github.com/Syllkom)',
-    'Content-Type': 'application/json'
+    'User-Agent': 'Aethero/1.0 (Syllkom)',
+    'Accept': 'application/json'
+}
+
+const getAuthParams = () => {
+    const login = (global.danbooru?.login || process.env.DANBOORU_LOGIN || '').trim()
+    const apiKey = (global.danbooru?.apiKey || process.env.DANBOORU_API_KEY || '').trim()
+    if (login && apiKey) return { login, api_key: apiKey }
+    return {}
 }
 
 const cleanStr = (str) => {
@@ -24,15 +32,14 @@ const processPost = (post) => {
     if (post.is_banned || post.is_deleted) return null
 
     const imgUrl = post.large_file_url || post.file_url || post.preview_file_url 
-    
     if (!imgUrl) return null
 
-    const charTags = (post.tag_string_character || '').split(' ')
-    const copyrightTags = (post.tag_string_copyright || '').split(' ')
-    const artistTags = (post.tag_string_artist || '').split(' ')
+    const charTags = (post.tag_string_character || '').split(' ').filter(Boolean)
+    const copyrightTags = (post.tag_string_copyright || '').split(' ').filter(Boolean)
+    const artistTags = (post.tag_string_artist || '').split(' ').filter(Boolean)
 
-    const name = charTags.length > 0 && charTags[0] !== '' ? cleanStr(charTags[0]) : 'Personaje Original'
-    const rawCopyright = copyrightTags.length > 0 && copyrightTags[0] !== '' ? copyrightTags[0] : 'original'
+    const name = charTags.length > 0 ? cleanStr(charTags[0]) : 'Personaje Original'
+    const rawCopyright = copyrightTags.length > 0 ? copyrightTags[0] : 'original'
     const source = rawCopyright !== 'original' ? cleanStr(rawCopyright) : 'Original'
 
     return {
@@ -43,7 +50,7 @@ const processPost = (post) => {
         imageUrl: imgUrl,
         favs: post.fav_count || 0,
         score: post.score || 0,
-        rating: post.rating,
+        rating: post.rating || 'g',
         artist: cleanStr(artistTags[0] || 'Desconocido'),
         createdAt: post.created_at
     }
@@ -51,17 +58,19 @@ const processPost = (post) => {
 
 export async function getRandomCharacter(tags = '') {
     try {
-        const randomPage = Math.floor(Math.random() * 1000) + 1
+        const randomPage = Math.floor(Math.random() * 200) + 1
 
-        const { data } = await axios.get(BASE_URL, {
-            params: {
-                tags: `1girl ${tags}`, 
+        const data = await got(BASE_URL, {
+            searchParams: {
+                ...getAuthParams(),
+                tags: `1girl ${tags}`.trim(),
                 limit: 20,
                 page: randomPage
             },
             headers: HEADERS,
-            timeout: 15000 
-        })
+            responseType: 'json',
+            timeout: { request: 15000 }
+        }).json()
 
         if (!data || !Array.isArray(data) || data.length === 0) return null
 
@@ -74,7 +83,6 @@ export async function getRandomCharacter(tags = '') {
         if (validPosts.length === 0) return null
 
         const winner = validPosts[Math.floor(Math.random() * validPosts.length)]
-
         return processPost(winner)
 
     } catch (e) {
@@ -86,7 +94,12 @@ export async function getRandomCharacter(tags = '') {
 export async function getPost(id) {
     try {
         const url = BASE_URL.replace('posts.json', `posts/${id}.json`)
-        const { data } = await axios.get(url, { headers: HEADERS })
+        const data = await got(url, {
+            searchParams: { ...getAuthParams() },
+            headers: HEADERS,
+            responseType: 'json',
+            timeout: { request: 15000 }
+        }).json()
         return processPost(data)
     } catch (e) {
         return null
@@ -97,13 +110,16 @@ export async function getTagInfo(tagName) {
     try {
         if (!tagName || tagName === 'original') return null
 
-        const { data } = await axios.get(TAG_URL, {
-            params: {
+        const data = await got(TAG_URL, {
+            searchParams: {
+                ...getAuthParams(),
                 'search[name]': tagName,
                 limit: 1
             },
-            headers: HEADERS
-        })
+            headers: HEADERS,
+            responseType: 'json',
+            timeout: { request: 15000 }
+        }).json()
 
         if (data && data.length > 0) {
             return {
@@ -121,18 +137,19 @@ export async function getTagInfo(tagName) {
 export async function getRandomVideo(tags = '') {
     try {
         const randomPage = Math.floor(Math.random() * 50) + 1
-
         const searchTags = `video rating:explicit ${tags}`.trim()
 
-        const { data } = await axios.get(BASE_URL, {
-            params: {
+        const data = await got(BASE_URL, {
+            searchParams: {
+                ...getAuthParams(),
                 tags: searchTags,
                 limit: 20,
                 page: randomPage
             },
             headers: HEADERS,
-            timeout: 15000 
-        })
+            responseType: 'json',
+            timeout: { request: 15000 }
+        }).json()
 
         if (!data || !Array.isArray(data) || data.length === 0) return null
 
@@ -146,11 +163,17 @@ export async function getRandomVideo(tags = '') {
         if (validPosts.length === 0) return null
 
         const winner = validPosts[Math.floor(Math.random() * validPosts.length)]
-
         return processPost(winner)
 
     } catch (e) {
         console.error('Danbooru Video Error:', e.message)
         return null
     }
+}
+
+export default {
+    getRandomCharacter,
+    getPost,
+    getTagInfo,
+    getRandomVideo
 }

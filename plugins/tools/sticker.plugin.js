@@ -1,108 +1,115 @@
 // ./plugins/tools/sticker.plugin.js
-import { stickerWebp } from '../../library/media/mediaConverter.js'
-import axios from 'axios'
+import { imageWebp, videoWebp, stickerWebp } from '../../library/media/mediaConverter.js'
 
-const DEFAULTS = { pack: 'Aethero', author: 'Aethero powered by Syllkom' }
+const DEFAULTS = { packname: 'Aethero', author: 'Aethero by Syllkom' }
 
 export default {
-    command: true, usePrefix: true,
-    case: ['sticker', 's', 'wm', 'setsticker', 'qc', 'quote'],
-    description: 'Crea stickers personalizados, modifica packname/author y genera stickers tipo QC.',
+    command: true,
+    usePrefix: true,
+    case: ['sticker', 's', 'wm', 'setsticker', 'take'],
+    description: 'Convierte imágenes, videos o stickers a formato sticker con metadatos personalizados.',
     category: 'herramientas',
-    usage: ['sticker (media)', 'qc ‹texto›', 'setsticker ‹pack›|‹autor›'],
+    usage: ['s ‹imagen/video›', 'wm ‹pack›|‹autor›', 'take ‹pack›|‹autor›', 'setsticker ‹pack›|‹autor›'],
     script: async (m, { sock }) => {
         const db = await global.db.open('sticker_config')
         db['@users'] ||= {}
         const userConf = db['@users'][m.sender.id] || {}
-        const options = { 
-            packname: userConf.packname ?? DEFAULTS.pack, 
-            author: userConf.author ?? DEFAULTS.author 
+
+        let packname = userConf.packname ?? DEFAULTS.packname
+        let author = userConf.author ?? DEFAULTS.author
+
+        if (m.command === 'setsticker') {
+            if (m.text.trim().toLowerCase() === 'reset') {
+                delete db['@users'][m.sender.id]
+                return m.reply(`✓ *Configuración restaurada*\n- Pack: ${DEFAULTS.packname}\n- Autor: ${DEFAULTS.author}`)
+            }
+
+            if (!m.text.includes('|')) {
+                return m.reply(
+                    `╭○ *Configuración de Stickers*\n` +
+                    `╵ ✧ Pack: ${userConf.packname !== undefined ? `"${userConf.packname}"` : `${DEFAULTS.packname} (Por defecto)`}\n` +
+                    `╵ ✦ Autor: ${userConf.author !== undefined ? `"${userConf.author}"` : `${DEFAULTS.author} (Por defecto)`}\n` +
+                    `╰╶╴──────╶╴─╶╴◯\n\n` +
+                    `ⓘ Para cambiar usa: *.setsticker Pack | Autor*\n` +
+                    `ⓘ Para dejar uno vacío: *.setsticker | Autor* o *.setsticker Pack |*\n` +
+                    `ⓘ Para reiniciar: *.setsticker reset*`
+                )
+            }
+
+            const [p, a] = m.text.split('|').map(s => s.trim())
+            db['@users'][m.sender.id] = { packname: p ?? '', author: a ?? '' }
+            return m.reply(`✓ *Metadatos actualizados*\n- Pack: ${p ?? ''}\n- Autor: ${a ?? ''}`)
         }
 
-        if (['wm', 'setsticker'].includes(m.command)) {
-            try {
-                const args = m.text.trim()
-                
-                if (args.toLowerCase() === 'reset') {
-                    if (db['@users'][m.sender.id]) delete db['@users'][m.sender.id]
-                    return m.reply(`Configuración restaurada.\n- Pack: ${DEFAULTS.pack}\n- Autor: ${DEFAULTS.author}`)
-                }
-
-                if (!args.includes('|')) {
-                    return m.reply(`Configuración Actual:\n- Pack: ${options.packname}\n- Autor: ${options.author}\n\nPara cambiar usa: .setsticker Pack | Autor\nPara reiniciar: .setsticker reset`)
-                }
-
-                const [p, a] = args.split('|').map(s => s.trim())
-                if (p === '' && a === '') return m.reply('Debes definir al menos un valor.')
-                db['@users'][m.sender.id] = { packname: p, author: a }
-                return m.reply(`Configuración guardada.\n- Pack: ${p}\n- Autor: ${a}`)
-
-            } catch (e) {
-                console.error(e)
-                return m.reply('Error al guardar configuración.')
+        if (['wm', 'take'].includes(m.command) && m.text) {
+            if (m.text.includes('|')) {
+                const [p, a] = m.text.split('|').map(s => s.trim())
+                packname = p ?? ''
+                author = a ?? ''
+            } else {
+                packname = m.text.trim()
+                author = ''
             }
         }
 
         await m.react('wait')
 
-        if (['qc', 'quote'].includes(m.command)) {
-            try {
-                const text = m.text || m.quoted?.content?.text
-                if (!text) return m.reply('Ingresa texto o responde a un mensaje.')
-                if (text.length > 50) return m.reply('Máximo 50 caracteres.')
-
-                const target = m.quoted ? m.quoted.sender : m.sender
-                const pp = await sock.profilePictureUrl(target.id, 'image').catch(() => 'https://files.catbox.moe/obz4b4.jpg')
-                
-                const obj = {
-                    type: "quote", format: "png", backgroundColor: "#0F0F0F",
-                    width: 512, height: 768, scale: 2,
-                    messages: [{
-                        entities: [], avatar: true,
-                        from: { id: 1, name: target.name || 'User', photo: { url: pp } },
-                        text: text, replyMessage: {}
-                    }]
-                }
-
-                const { data } = await axios.post('https://bot.lyo.su/quote/generate', obj)
-                const imgBuffer = Buffer.from(data.result.image, 'base64')
-                await sock.sendSticker(m.chat.id, { sticker: imgBuffer, mediaType: 'image' }, m.raw, options)
-                await m.react('done')
-                return 
-
-            } catch (e) {
-                console.error(e)
-                await m.react('error')
-                return m.reply('Error al generar QC.')
-            }
-        }
-
         try {
-            const target = (m.quoted && m.quoted.content?.media) ? m.quoted : (m.content?.media ? m : null)
-            if (!target) { await m.react('error'); return m.reply('Responde a una imagen, video o sticker.') }
+            const targetRaw = (m.quoted && (m.quoted.raw || m.quoted)) || m.raw
+            const targetMsg = targetRaw.message?.ephemeralMessage?.message 
+                || targetRaw.message?.viewOnceMessage?.message 
+                || targetRaw.message?.documentWithCaptionMessage?.message 
+                || targetRaw.message 
+                || {}
 
-            const type = target.type
-            const media = await target.content.media.download()
+            const isImage = !!targetMsg.imageMessage
+            const isVideo = !!targetMsg.videoMessage
+            const isSticker = !!targetMsg.stickerMessage
 
-            if (type === 'imageMessage') {
-                await sock.sendSticker(m.chat.id, { sticker: media, mediaType: 'image' }, m.raw, options)
-            } else if (type === 'videoMessage') {
-                const seconds = target.message?.videoMessage?.seconds || 0
-                if (seconds > 10) return m.reply('El video debe durar máximo 10 segundos.')
-                await sock.sendSticker(m.chat.id, { sticker: media, mediaType: 'video' }, m.raw, options)
-            } else if (type === 'stickerMessage') {
-                const newSticker = await stickerWebp(media, options)
-                await sock.sendMessage(m.chat.id, { sticker: newSticker }, { quoted: m.raw })
-            } else {
-                return m.reply('Formato de archivo no soportado.')
+            if (!isImage && !isVideo && !isSticker) {
+                await m.react('error')
+                return m.reply('ⓘ Responde o envía una *imagen*, *video corto* o *sticker*.')
             }
+
+            const mediaBuffer = await sock.downloadMedia(targetRaw)
+            if (!mediaBuffer || !mediaBuffer.length) {
+                await m.react('error')
+                return m.reply('ⓘ No se pudo descargar el archivo multimedia.')
+            }
+
+            const options = { packname, author, categories: ['🤖', '⚡'] }
+            let finalSticker = null
+
+            if (isImage) {
+                finalSticker = await imageWebp(mediaBuffer, options)
+            }
+            else if (isVideo) {
+                const duration = targetMsg.videoMessage?.seconds || 0
+                if (duration > 10) {
+                    await m.react('error')
+                    return m.reply('⚠ El video no debe durar más de 10 segundos.')
+                }
+                finalSticker = await videoWebp(mediaBuffer, options)
+            }
+            else if (isSticker) {
+                finalSticker = await stickerWebp(mediaBuffer, options)
+            }
+
+            if (!finalSticker) {
+                await m.react('error')
+                return m.reply('ⓘ Error al procesar el sticker.')
+            }
+
+            await sock.sendMessage(m.chat.id, {
+                sticker: finalSticker
+            }, { quoted: m.raw })
 
             await m.react('done')
 
         } catch (e) {
-            console.error(e)
+            console.error('Sticker Plugin Error:', e)
             await m.react('error')
-            m.reply('Error al procesar el sticker.')
+            m.reply(`ⓘ Error al crear sticker: ${e.message}`)
         }
     }
 }

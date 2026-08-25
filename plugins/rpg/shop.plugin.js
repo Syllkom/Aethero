@@ -1,13 +1,20 @@
 // ./plugins/rpg/shop.plugin.js
-import { Canvas, Image, loadImage, GlobalFonts } from '@napi-rs/canvas'
+import { Canvas, Image, loadImage, GlobalFonts, Path2D } from '@napi-rs/canvas'
 import fs from 'fs'
 import path from 'path'
-import axios from 'axios'
+import got from 'got'
 
 const RATES = {
     gold:    { cost: 1000, currency: 'money', label: 'Soles',  name: 'Oro'       },
     diamond: { cost: 10,   currency: 'gold',  label: 'Oro',    name: 'Diamantes' }
 }
+
+const ICONS = {
+    sol: new Path2D('M8 12a4 4 0 1 0 8 0a4 4 0 1 0 -8 0 M3 12h1m8 -9v1m8 8h1m-9 8v1m-6.4 -15.4l.7 .7m12.1 -.7l-.7 .7m0 11.4l.7 .7m-12.1 -.7l-.7 .7'),
+    oro: new Path2D('M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0 M14.8 9a2 2 0 0 0 -1.8 -1h-2a2 2 0 1 0 0 4h2a2 2 0 1 1 0 4h-2a2 2 0 0 1 -1.8 -1 M12 7v10'),
+    diamante: new Path2D('M6 5h12l3 5l-8.5 9.5a.7 .7 0 0 1 -1 0l-8.5 -9.5l3 -5 M10 12l-2 -2.2l.6 -1')
+}
+
 
 let fontsLoaded = false
 async function initFonts() {
@@ -24,8 +31,8 @@ async function initFonts() {
             if (!f.url) continue
             const fontPath = path.join(tempDir, f.file)
             if (!fs.existsSync(fontPath)) {
-                const res = await axios.get(f.url, { responseType: 'arraybuffer' })
-                fs.writeFileSync(fontPath, res.data)
+                const fontData = await got(f.url, { timeout: { request: 10000 } }).buffer()
+                fs.writeFileSync(fontPath, fontData)
             }
             if (fs.existsSync(fontPath)) GlobalFonts.registerFromPath(fontPath, f.name)
         }
@@ -33,16 +40,28 @@ async function initFonts() {
     } catch (e) {}
 }
 
-const drawTechFrame = (ctx, x, y, w, h, color, thickness = 2.5, len = 18) => {
-    ctx.save()
-    ctx.strokeStyle = color; ctx.lineWidth = thickness
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round'
+const roundRect = (ctx, x, y, w, h, r) => {
+    if (w < 2 * r) r = w / 2
+    if (h < 2 * r) r = h / 2
     ctx.beginPath()
-    ctx.moveTo(x, y + len);          ctx.lineTo(x, y);          ctx.lineTo(x + len, y)
-    ctx.moveTo(x + w - len, y);      ctx.lineTo(x + w, y);      ctx.lineTo(x + w, y + len)
-    ctx.moveTo(x, y + h - len);      ctx.lineTo(x, y + h);      ctx.lineTo(x + len, y + h)
-    ctx.moveTo(x + w - len, y + h);  ctx.lineTo(x + w, y + h);  ctx.lineTo(x + w, y + h - len)
-    ctx.stroke()
+    ctx.moveTo(x + r, y)
+    ctx.arcTo(x + w, y, x + w, y + h, r)
+    ctx.arcTo(x + w, y + h, x, y + h, r)
+    ctx.arcTo(x, y + h, x, y, r)
+    ctx.arcTo(x, y, x + w, y, r)
+    ctx.closePath()
+}
+
+const drawSvgIcon = (ctx, pathObj, x, y, size = 36, color = '#ffffff') => {
+    ctx.save()
+    ctx.translate(x, y)
+    const scale = size / 24
+    ctx.scale(scale, scale)
+    ctx.strokeStyle = color
+    ctx.lineWidth = 2
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    ctx.stroke(pathObj)
     ctx.restore()
 }
 
@@ -112,68 +131,178 @@ export default {
 
         await m.react('wait')
         await initFonts()
-        const fontMain  = fontsLoaded ? 'NunitoSans, sans-serif'  : 'sans-serif'
         const fontTitle = fontsLoaded ? 'AntonRegular, sans-serif' : 'sans-serif'
+        const fontMono  = 'monospace'
 
-        const W = 1200, H = 630
+        const W = 1200, H = 580
         const canvas = new Canvas(W, H)
         const ctx    = canvas.getContext('2d')
 
-        const F1 = '#dc2626', F2 = '#f97316', G1 = '#ec4899', G2 = '#a855f7'
+        const C_BG   = '#050409'
+        const C_CARD = '#0d0b17'
+        const C1     = '#f5b942' // Soles (Ámbar)
+        const C2     = '#2dd4bf' // Oro (Teal)
+        const C3     = '#7dd3fc' // Diamantes (Celeste)
+        const C_SUB  = '#94a3b8'
+        const C_LINE = 'rgba(148, 163, 184, 0.16)'
 
-        ctx.fillStyle = '#07060a'
+        ctx.fillStyle = C_BG
         ctx.fillRect(0, 0, W, H)
 
-        const ppUrl  = await sock.profilePictureUrl(m.sender.id, 'image').catch(() => 'https://files.catbox.moe/obz4b4.jpg')
-        const ppBuff = await (async () => {
-            try {
-                const res = await axios.get(ppUrl, { responseType: 'arraybuffer', timeout: 5000 })
-                return res.status === 200 ? res.data : null
-            } catch { return null }
-        })()
+        const cardX = 35, cardY = 35, cardW = W - 70, cardH = H - 70
+        
+        ctx.save()
+        roundRect(ctx, cardX, cardY, cardW, cardH, 20)
+        ctx.fillStyle = C_CARD
+        ctx.fill()
+        ctx.strokeStyle = C_LINE
+        ctx.lineWidth = 1.5
+        ctx.stroke()
+        ctx.clip()
 
-        const UX = 820, UY = 30, UW = 300, UH = 155
+        const radGrad = ctx.createRadialGradient(W / 2, cardY + 60, 20, W / 2, cardY + 60, 520)
+        radGrad.addColorStop(0, 'rgba(245, 185, 66, 0.14)')
+        radGrad.addColorStop(0.55, 'rgba(245, 185, 66, 0.03)')
+        radGrad.addColorStop(1, 'rgba(0,0,0,0)')
+        ctx.fillStyle = radGrad
+        ctx.fillRect(cardX, cardY, cardW, cardH)
 
-        ctx.fillStyle = 'rgba(255,255,255,0.03)'
-        ctx.fillRect(UX, UY, UW, UH)
-        ctx.strokeStyle = 'rgba(255,255,255,0.07)'; ctx.lineWidth = 1
-        ctx.strokeRect(UX, UY, UW, UH)
+        ctx.fillStyle = 'rgba(245, 185, 66, 0.035)'
+        ctx.font = `bold 190px ${fontTitle}`
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText('MERCADO', W / 2, H / 2)
+        ctx.textBaseline = 'alphabetic'
+        ctx.restore()
 
-        drawTechFrame(ctx, UX, UY, UW, UH, 'rgba(236,72,153,0.45)', 1.5, 12)
+        const tagText = 'CASA DE CAMBIO · RPG'
+        ctx.font = `bold 13px ${fontMono}`
+        ctx.textAlign = 'center'
+        ctx.fillStyle = C1
+        ctx.fillText(tagText, W / 2, cardY + 58)
 
-        const avS = 68, avCX = UX + 20, avCY = UY + (UH - avS) / 2
-        if (ppBuff) {
-            try {
-                const avImg = await loadImage(ppBuff)
-                ctx.save()
-                ctx.beginPath(); ctx.rect(avCX, avCY, avS, avS); ctx.clip()
-                ctx.drawImage(avImg, avCX, avCY, avS, avS)
-                ctx.restore()
-            } catch {}
+        const tagW = ctx.measureText(tagText).width
+        ctx.fillStyle = 'rgba(245, 185, 66, 0.6)'
+        ctx.fillRect((W / 2) - (tagW / 2) - 40, cardY + 53, 26, 1.5)
+        ctx.fillRect((W / 2) + (tagW / 2) + 14, cardY + 53, 26, 1.5)
+
+        ctx.save()
+        ctx.font = `bold 76px ${fontTitle}`
+        ctx.textAlign = 'center'
+        const titleText = 'MERCADO'
+        const titleW = ctx.measureText(titleText).width
+        
+        const titleGrad = ctx.createLinearGradient((W / 2) - (titleW / 2), 0, (W / 2) + (titleW / 2), 0)
+        titleGrad.addColorStop(0, C1)
+        titleGrad.addColorStop(0.48, '#ffffff')
+        titleGrad.addColorStop(1, C3)
+        ctx.fillStyle = titleGrad
+        ctx.fillText(titleText, W / 2, cardY + 132)
+        ctx.restore()
+
+        const chipW = 320, chipH = 100, chipGap = 20
+        const totalChipsW = (chipW * 3) + (chipGap * 2)
+        const startX = (W - totalChipsW) / 2
+        const chipsY = cardY + 165
+
+        const drawBalanceChip = (x, y, iconPath, iconColor, value, label) => {
+            ctx.save()
+
+            roundRect(ctx, x, y, chipW, chipH, 12)
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.03)'
+            ctx.fill()
+            ctx.strokeStyle = C_LINE
+            ctx.lineWidth = 1.2
+            ctx.stroke()
+
+            drawSvgIcon(ctx, iconPath, x + 20, y + 31, 38, iconColor)
+
+            ctx.fillStyle = '#ffffff'
+            ctx.font = `bold 32px ${fontTitle}`
+            ctx.textAlign = 'left'
+            ctx.fillText(String(value), x + 74, y + 50)
+
+            ctx.fillStyle = C_SUB
+            ctx.font = `12px ${fontMono}`
+            ctx.fillText(label.toUpperCase(), x + 76, y + 74)
+            ctx.restore()
         }
 
-        const userName = m.sender?.name || m.sender?.number || 'Usuario'
-        const shortName = userName.length > 14 ? userName.slice(0, 13) + '…' : userName
-        ctx.textAlign = 'left'
-        ctx.fillStyle = '#ffffff'
-        ctx.font = `bold 18px ${fontMain}`
-        ctx.fillText(shortName, avCX + avS + 14, avCY + 8)
+        drawBalanceChip(startX, chipsY, ICONS.sol, C1, (user.money || 0).toLocaleString('es-ES'), 'Soles')
+        drawBalanceChip(startX + chipW + chipGap, chipsY, ICONS.oro, C2, (user.gold || 0).toLocaleString('es-ES'), 'Oro')
+        drawBalanceChip(startX + (chipW + chipGap) * 2, chipsY, ICONS.diamante, C3, (user.diamond || 0).toLocaleString('es-ES'), 'Diamantes')
 
-        const titleGrad = ctx.createLinearGradient(80, 0, 80 + 900, 0)
-        titleGrad.addColorStop(0,    '#ffffff')
-        titleGrad.addColorStop(0.3,  '#fca5a5')
-        titleGrad.addColorStop(0.55, '#f97316')
-        titleGrad.addColorStop(0.75, '#f472b6')
-        titleGrad.addColorStop(1,    '#a855f7')
-        ctx.fillStyle = titleGrad
-        ctx.font = `bold 96px ${fontTitle}`
+        const pillY = chipsY + chipH + 42
+        const drawMarketPill = (x, y, w, dotColor, label) => {
+            ctx.save()
+            roundRect(ctx, x, y, w, 38, 19)
+            ctx.strokeStyle = C_LINE
+            ctx.lineWidth = 1.2
+            ctx.stroke()
+
+            ctx.beginPath()
+            ctx.arc(x + 20, y + 19, 3.5, 0, Math.PI * 2)
+            ctx.fillStyle = dotColor
+            ctx.fill()
+
+            ctx.fillStyle = C_SUB
+            ctx.font = `13px ${fontMono}`
+            ctx.textAlign = 'left'
+            ctx.fillText(label, x + 34, y + 24)
+            ctx.restore()
+        }
+
+        const pill1W = 210, pill2W = 205, pillGap = 16
+        const startPillX = (W - (pill1W + pill2W + pillGap)) / 2
+
+        drawMarketPill(startPillX, pillY, pill1W, C1, 'Mercado de Divisas')
+        drawMarketPill(startPillX + pill1W + pillGap, pillY, pill2W, C3, 'Mercado de Waifus')
+
+        const footY = H - 54
+        ctx.font = `12px ${fontMono}`
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.35)'
         ctx.textAlign = 'left'
-        ctx.fillText('GLOBAL MARKET', 80, 160)
+        ctx.fillText(`ID_REF: ${m.sender.number || m.sender.id.split('@')[0]}`, cardX + 24, footY)
+
+        ctx.textAlign = 'right'
+        ctx.fillText('Aethero Advanced Engine', cardX + cardW - 24, footY)
+        ctx.textAlign = 'left'
 
         const buffer = await canvas.toBuffer('image/jpeg')
-        const txt = `▢ *TIENDA & ECONOMÍA*\n\n- Tu Saldo:\n  - ${user.money} Soles 𖤓\n  - ${user.gold || 0} Oro ⛃\n  - ${user.diamond || 0} Diamantes ✦\n\n▢ *MERCADO DE DIVISAS*\n- Comprar: .shop buy ‹item› ‹cant›\n- Vender: .shop sell ‹item› ‹cant›\n\n▢ *MERCADO DE WAIFUS*\n- Ver lista: .shop list\n- Vender: .shop sell ‹id› ‹precio›\n- Comprar: .shop buy ‹id›`
+        const pp = await sock.profilePictureUrl(m.sender.id, 'image').catch(() => 'https://files.catbox.moe/obz4b4.jpg')
 
-        await sock.sendMessage(m.chat.id, { image: buffer, caption: txt }, { quoted: m.raw })
+        const txt = [
+            '╭○ *Tu Saldo:* ๑ 🌟 ୧',
+            `﹕𖤓 ${user.money} Soles`,
+            `﹕⛃ ${user.gold || 0} Oro`,
+            `﹕✦ ${user.diamond || 0} Diamantes`,
+            '╰╶╴──────╶╴─╶╴◯',
+            '',
+            '╭○ *Mercado De Divisas*',
+            '╵ Comprar: .shop buy ‹item› ‹cant›',
+            '╵ Vender: .shop sell ‹item› ‹cant›',
+            '╰╶╴──────╶╴─╶╴◯',
+            '',
+            '╭○ *Mercado De Waifus*',
+            '╵ Ver lista: .shop list',
+            '╵ Vender: .shop sell ‹id› ‹precio›',
+            '╵ Comprar: .shop buy ‹id›',
+            '╰╶╴──────╶╴─╶╴◯'
+        ].join('\n')
+
+        await sock.sendMessage(m.chat.id, { 
+            image: buffer, 
+            caption: txt 
+        }, { 
+            quoted: await sock.fakeOrder(m.chat.id, { 
+                image: pp, 
+                message: `ⓘ ESTADO: ➟ ${user.money < 0 ? 'ENDEUDADO' : 'SOLVENTE'}`, 
+                orderTitle: m.sender.name, 
+                price: 374, 
+                currency: 'USD' 
+            }) 
+        })
+        
         await m.react('done')
     }
 }

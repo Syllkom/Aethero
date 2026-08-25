@@ -1,16 +1,14 @@
-// ./core/library/socketExtensions.js
+// ./library/socketExtensions.js
 import got from 'got'
 import { Jimp } from 'jimp'
-import axios from 'axios'
 import { downloadMediaMessage, generateWAMessageContent, generateWAMessageFromContent } from '@whiskeysockets/baileys'
 
 import { imageWebp, videoWebp } from './media/mediaConverter.js'
 import $base from '../core/library/hyperDBAdapter.js'
 
-import { buildCatalog, buildOrder, buildPayment, buildInvoice } from './builders/commerceBuilder.js'
-import { buildLocationMenu, buildInteractiveMenu, buildCards, buildMediaMenu, buildPollSnapshot, buildProductMenu, buildAdMenu } from './builders/interactiveBuilder.js'
-import { buildRichResponse, executeAlbumMessage } from './builders/richBuilder.js'
-import { buildFakeOrder, buildFakePayment, buildFakeInvoice, buildFakeLink, buildFakeCatalog } from './builders/fakeContextBuilder.js'
+import { buildCatalog, buildOrder, buildPayment, buildInvoice } from './builders/commerce.builder.js'
+import { buildLocationMenu, buildInteractiveMenu, buildCards, buildMediaMenu, buildPollSnapshot, buildProductMenu, buildAdMenu, executeAlbumMessage, buildOrderStatusMenu, buildLocationButtons } from './builders/interactive.builder.js'
+import { buildFakeOrder, buildFakePayment, buildFakeInvoice, buildFakeLink, buildFakeCatalog } from './builders/fakeContext.builder.js'
 
 const generateID = () => 'HK_' + Date.now().toString(36) + Math.random().toString(36).substring(2)
 
@@ -20,8 +18,11 @@ export default async function (sock) {
 
         sock.getBuffer = async (url) => {
             if (Buffer.isBuffer(url)) return url
-            try { const res = await axios.get(url, { responseType: 'arraybuffer' }); return res.data } 
-            catch (e) { return Buffer.alloc(0) }
+            try {
+                return await got(url, { timeout: { request: 10000 } }).buffer()
+            } catch (e) {
+                return Buffer.alloc(0)
+            }
         }
 
         sock.downloadMedia = async (message, type = 'buffer') => {
@@ -113,8 +114,57 @@ export default async function (sock) {
         }
 
         sock.profilePictureUrl = getProfilePic
-        sock.updateProfilePicture = getProfilePic
-        sock.groupUpdateProfilePicture = getProfilePic
+        // sock.updateProfilePicture = getProfilePic
+        // sock.groupUpdateProfilePicture = getProfilePic
+        
+        // ./library/socket.extensions.js
+
+        sock.updateProfilePicture = async (jid, img) => {
+            try {
+                let buffer
+                if (Buffer.isBuffer(img)) {
+                    buffer = img
+                } else if (img?.url) {
+                    buffer = await sock.getBuffer(img.url)
+                } else if (typeof img === 'string') {
+                    buffer = await sock.getBuffer(img)
+                }
+
+                if (!buffer || !buffer.length) throw new Error('Buffer de imagen inválido')
+
+                const jimpImg = await Jimp.read(buffer)
+
+                const resized = jimpImg.scaleToFit({ w: 720, h: 720 })
+                const imgBuffer = await resized.getBuffer('image/jpeg')
+
+                const isGroup = jid.endsWith('@g.us')
+                let targetJid = jid
+
+                if (jid.endsWith('@lid') && jid === sock.user?.lid) {
+                    targetJid = sock.user.id.split(':')[0] + '@s.whatsapp.net'
+                }
+
+                return await sock.query({
+                    tag: 'iq',
+                    attrs: {
+                        ...(isGroup ? { target: jid } : {}),
+                        to: isGroup ? '@s.whatsapp.net' : targetJid,
+                        type: 'set',
+                        xmlns: 'w:profile:picture'
+                    },
+                    content: [
+                        {
+                            tag: 'picture',
+                            attrs: { type: 'image' },
+                            content: imgBuffer
+                        }
+                    ]
+                })
+            } catch (e) {
+                console.error('Update Profile Picture Error:', e.message)
+                throw e
+            }
+        }
 
         const originalRelayMessage = sock.relayMessage
 
@@ -136,14 +186,15 @@ export default async function (sock) {
         const originalSendMessage = sock.sendMessage
 
         sock.sendMessage = async (jid, content, options = {}) => {
+            // Sanitizador de citados
             if (options.quoted) {
-            if (options.quoted.raw) {
-            options.quoted = options.quoted.raw
-               } else if (!options.quoted.key) {
-                 delete options.quoted
-               }
+                if (options.quoted.raw) {
+                    options.quoted = options.quoted.raw
+                } else if (!options.quoted.key) {
+                    delete options.quoted
+                }
             }
-    
+
             const msgId = options.messageId || generateID()
 
             let globalNodes = []
@@ -159,7 +210,7 @@ export default async function (sock) {
 
             const mergeNodes = (builderNodes) => [...globalNodes, ...(builderNodes || [])]
 
-            // commerce
+            // Commerce
             if (content.invoice) {
                 const { message, nodes } = await buildInvoice(sock, jid, content.invoice, options)
                 return await sock.relayMessage(jid, message, { messageId: msgId, additionalNodes: mergeNodes(nodes) })
@@ -176,8 +227,14 @@ export default async function (sock) {
                 const { message, nodes } = await buildPayment(sock, jid, content.payment, options)
                 return await sock.relayMessage(jid, message, { messageId: msgId, additionalNodes: mergeNodes(nodes) })
             }
+            
+            // messages
+            if (content.album) {
+                options.additionalNodes = globalNodes.length > 0 ? globalNodes : undefined
+                return await executeAlbumMessage(sock, jid, content.album, options)
+            }
 
-            // interactive ui
+            // Interactive UI
             if (content.locationMenu) {
                 const { message, nodes } = await buildLocationMenu(sock, jid, content.locationMenu, options)
                 return await sock.relayMessage(jid, message, { messageId: msgId, additionalNodes: mergeNodes(nodes) })
@@ -202,25 +259,28 @@ export default async function (sock) {
                 const { message, nodes } = await buildAdMenu(sock, jid, content.adMenu, options)
                 return await sock.relayMessage(jid, message, { messageId: msgId, additionalNodes: mergeNodes(nodes) })
             }
-
-            // rich responses & albums
-            if (content.richResponse) {
-                const { message, nodes } = await buildRichResponse(sock, jid, content.richResponse, options)
+            if (content.productMenu) {
+                const { message, nodes } = await buildProductMenu(sock, jid, content.productMenu, options)
+                return await sock.relayMessage(jid, message, { messageId: msgId, additionalNodes: mergeNodes(nodes) })
+            }
+            if (content.orderStatusMenu) {
+                const { message, nodes } = await buildOrderStatusMenu(sock, jid, content.orderStatusMenu, options)
                 return await sock.relayMessage(jid, message, { messageId: msgId, additionalNodes: mergeNodes(nodes) })
             }
             if (content.pollSnapshot) {
                 const { message, nodes } = await buildPollSnapshot(sock, jid, content.pollSnapshot, options)
                 return await sock.relayMessage(jid, message, { messageId: msgId, additionalNodes: mergeNodes(nodes) })
             }
-            if (content.album) {
-                options.additionalNodes = globalNodes.length > 0 ? globalNodes : undefined
-                return await executeAlbumMessage(sock, jid, content.album, options)
+            if (content.locationButtons || content.buttonsMenu) {
+                const { message, nodes } = await buildLocationButtons(sock, jid, content.locationButtons || content.buttonsMenu, options)
+                return await sock.relayMessage(jid, message, { messageId: msgId, additionalNodes: mergeNodes(nodes) })
             }
 
             options.additionalNodes = globalNodes.length > 0 ? globalNodes : undefined
             return await originalSendMessage(jid, content, options)
         }
 
+        // Contextos Falsos
         sock.fakeOrder = (jid, opts) => buildFakeOrder(sock, jid, opts)
         sock.fakeCatalog = (jid, data, opts) => buildFakeCatalog(sock, jid, data, opts)
         sock.fakePayment = (jid, opts) => buildFakePayment(sock, jid, opts)
