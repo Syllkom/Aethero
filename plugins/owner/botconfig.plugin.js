@@ -1,4 +1,5 @@
 // ./plugins/owner/botconfig.plugin.js
+
 function resolveTargetNumber(m, argIndex = 2) {
     if (m.quoted?.sender?.number) return m.quoted.sender.number.replace(/\D/g, '')
     if (m.quoted?.key?.participant) return m.quoted.key.participant.split('@')[0].replace(/\D/g, '')
@@ -9,7 +10,6 @@ function resolveTargetNumber(m, argIndex = 2) {
         const raw = m.args[argIndex].replace(/\D/g, '')
         if (raw.length >= 7) return raw
     }
-
     if (!m.chat.isGroup && m.chat.id.endsWith('@s.whatsapp.net')) {
         return m.chat.id.split('@')[0].replace(/\D/g, '')
     }
@@ -20,17 +20,17 @@ export default {
     before: true, priority: 1,
     command: true, usePrefix: true,
     case: ['botconfig', 'bconfig'],
-    description: 'Configura la auto-lectura, notificaciones y el anti-llamadas (Whitelist) del bot.',
+    description: 'Configura auto-lectura, notificaciones, anti-llamadas y el modo privado/público del bot.',
     category: 'owner',
     usage: [
+        'bconfig mode public/private',
+        'bconfig private on/off',
         'bconfig autoread global on/off', 
         'bconfig notify on/off', 
         'bconfig anticall on/off', 
-        'bconfig anticall add ‹número/citar›',
-        'bconfig anticall del ‹número/citar›',
-        'bconfig anticall list'
+        'bconfig anticall add/del/list'
     ],
-    script: async (m, { sock }) => {
+    script: async (m, { sock, control }) => {
         if (m.botConfigHandled) return
 
         if (global.db) {
@@ -38,8 +38,17 @@ export default {
                 const botConfig = await global.db.open('@bot_config')
                 const chatConfig = await global.db.open('@chat_config')
 
+                if (botConfig.privateMode !== undefined) global.config.privateMode = botConfig.privateMode
                 if (botConfig.antiCall !== undefined) global.config.antiCall = botConfig.antiCall
                 if (Array.isArray(botConfig.antiCallWhitelist)) global.config.antiCallWhitelist = botConfig.antiCallWhitelist
+
+                if (global.config.privateMode === true) {
+                    const isAuthorized = m.sender.role('root', 'owner') || m.sender.roles.bot || m.bot?.fromMe || m.raw?.key?.fromMe
+                    if (!isAuthorized) {
+                        if (control) control.end = true
+                        return
+                    }
+                }
 
                 if (!m.sender.roles.bot) {
                     const isGlobalRead = botConfig.autoRead === true
@@ -53,7 +62,7 @@ export default {
                 console.error('[BotConfig Sync Error]', e.message)
             }
         }
-
+        
         if (m.isCmd && ['botconfig', 'bconfig'].includes(m.command)) {
             m.botConfigHandled = true
 
@@ -62,6 +71,32 @@ export default {
             }
 
             const option = m.args[0]?.toLowerCase()
+
+            if (['mode', 'modo', 'private', 'privado', 'self'].includes(option)) {
+                let sub = m.args[1]?.toLowerCase()
+                
+                if (option === 'private' || option === 'privado' || option === 'self') {
+                    sub = m.args[0] ? (m.args[1]?.toLowerCase() || 'toggle') : 'toggle'
+                }
+
+                const isEnable = ['on', 'private', 'privado', 'self', 'true'].includes(sub)
+                const isDisable = ['off', 'public', 'publico', 'público', 'false'].includes(sub)
+
+                if (!isEnable && !isDisable) {
+                    return m.reply('ⓘ Uso correcto:\n- _.bconfig mode public/private_\n- _.bconfig private on/off_')
+                }
+
+                const finalState = isEnable
+                const botConfig = await global.db.open('@bot_config')
+                botConfig.privateMode = finalState
+                global.config.privateMode = finalState
+
+                return m.reply(
+                    finalState
+                        ? '🔒 *MODO PRIVADO ACTIVADO*\nAhora el bot solo responderá a los propietarios (Root/Owner) y a sí mismo.'
+                        : '🌐 *MODO PÚBLICO ACTIVADO*\nAhora todos los usuarios pueden usar los comandos del bot libremente.'
+                )
+            }
 
             if (option === 'notify') {
                 const mode = m.args[1]?.toLowerCase()
@@ -162,6 +197,9 @@ export default {
 
             return m.reply(
                 `╭○ *Configuración de Instancia (Aethero)*\n\n` +
+                `— *Modo de Acceso:*\n` +
+                `╵ ✧ _.bconfig mode public/private_\n` +
+                `╵ ✧ _.bconfig private on/off_\n\n` +
                 `— *Auto-Lectura de Mensajes:*\n` +
                 `╵ ✧ _.bconfig autoread global on/off_ (Todos los chats)\n` +
                 `╵ ✧ _.bconfig autoread chat on/off_ (Este chat únicamente)\n\n` +

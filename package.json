@@ -1,6 +1,6 @@
 {
   "name": "Aethero",
-  "version": "1.0.1",
+  "version": "1.0.0",
   "description": "Framework Event-Driven modular para bots de WhatsApp (Node.js ≥18.x) con aislamiento de procesos y pipeline de handlers encadenados.",
   "type": "module",
   "main": "index.js",
@@ -27,34 +27,28 @@
     "url": "git+https://github.com/Syllkom/Aethero.git"
   },
   "dependencies": {
-    "@adiwajshing/keyed-db": "^0.2.4",
-    "@cerebras/cerebras_cloud_sdk": "^1.64.1",
-    "@google/generative-ai": "^0.24.1",
     "@hapi/boom": "^10.0.1",
     "@whiskeysockets/baileys": "latest",
-    "@syllkom/hyper-db": "^3.0.1",
+    "@syllkom/hyper-db": "github:Syllkom/hyper-db",
     "@napi-rs/canvas": "^1.0.3",
     "btch-downloader": "^6.3.6",
     "chalk": "^5.3.0",
-    "cheerio": "1.0.0-rc.12",
     "chokidar": "^4.0.1",
     "dotenv": "^17.0.0",
-    "express": "^4.19.2",
-    "ffmpeg-static": "^5.3.0",
     "fluent-ffmpeg": "^2.1.3",
     "yt-search": "^2.13.1",
     "acrcloud": "^1.4.0",
     "got": "^14.6.6",
-    "gradient-string": "^3.0.0",
     "jimp": "^1.6.1",
     "libphonenumber-js": "^1.12.15",
     "lodash": "^4.17.21",
     "moment-timezone": "^0.5.43",
-    "node-cache": "5.1.2",
     "node-webpmux": "^3.2.0",
-    "openai": "^6.32.0",
     "pino": "9.1.0",
     "qrcode": "^1.5.3",
     "qrcode-terminal": "^0.12.0"
+  },
+  "optionalDependencies": {
+    "ffmpeg-static": "^5.3.0"
   }
 }

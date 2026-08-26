@@ -1,13 +1,14 @@
 // ./library/media/mediaConverter.js
 import ff from 'fluent-ffmpeg'
-import ffmpegStatic from 'ffmpeg-static'
 import webp from 'node-webpmux'
 import fs from 'fs'
 import path from 'path'
 import { Canvas, loadImage } from '@napi-rs/canvas'
+import { getFFmpegPath } from './ffmpegResolver.js'
 
-if (ffmpegStatic && fs.existsSync(ffmpegStatic)) {
-    ff.setFfmpegPath(ffmpegStatic)
+const ffmpegBinary = getFFmpegPath()
+if (ffmpegBinary) {
+    ff.setFfmpegPath(ffmpegBinary)
 }
 
 async function imageBufferToWebp(mediaBuffer) {

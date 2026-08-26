@@ -2,7 +2,7 @@
 import fs from 'fs'
 import path from 'path'
 import { spawn } from 'child_process'
-import ffmpegPath from 'ffmpeg-static'
+import { getFFmpegPath } from './ffmpegResolver.js'
 
 function randomName(ext) {
     return Math.floor(Math.random() * 10000) + ext
@@ -20,8 +20,10 @@ export async function gifToMp4(buffer) {
 
     await fs.promises.writeFile(input, buffer)
 
+    const ffmpegBinary = getFFmpegPath()
+
     return new Promise((resolve, reject) => {
-        const ffm = spawn(ffmpegPath || 'ffmpeg', [
+        const ffm = spawn(ffmpegBinary, [
             '-y',
             '-i', input,
             '-movflags', 'faststart',
