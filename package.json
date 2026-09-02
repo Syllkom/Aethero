@@ -28,25 +28,26 @@
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
-    "@whiskeysockets/baileys": "latest",
-    "@syllkom/hyper-db": "github:Syllkom/hyper-db",
     "@napi-rs/canvas": "^1.0.3",
+    "@syllkom/hyper-db": "github:Syllkom/hyper-db",
+    "@whiskeysockets/baileys": "latest",
+    "acrcloud": "^1.4.0",
     "btch-downloader": "^6.3.6",
     "chalk": "^5.3.0",
     "chokidar": "^4.0.1",
     "dotenv": "^17.0.0",
     "fluent-ffmpeg": "^2.1.3",
-    "yt-search": "^2.13.1",
-    "acrcloud": "^1.4.0",
     "got": "^14.6.6",
     "jimp": "^1.6.1",
+    "jszip": "^3.10.1",
     "libphonenumber-js": "^1.12.15",
     "lodash": "^4.17.21",
     "moment-timezone": "^0.5.43",
     "node-webpmux": "^3.2.0",
     "pino": "9.1.0",
     "qrcode": "^1.5.3",
-    "qrcode-terminal": "^0.12.0"
+    "qrcode-terminal": "^0.12.0",
+    "yt-search": "^2.13.1"
   },
   "optionalDependencies": {
     "ffmpeg-static": "^5.3.0"

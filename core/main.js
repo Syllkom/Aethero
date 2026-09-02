@@ -1,4 +1,3 @@
-// ./core/main.js
 import path from 'path'
 import { pathToFileURL } from 'url'
 import chalk from 'chalk'
@@ -36,7 +35,6 @@ for (const module of env.MODULEREGISTRY) {
 const mainModule = env.MODULEREGISTRY.find(o => o.mainLogic)
 if (!mainModule) throw new Error('Main execution module missing')
 
-// Librerías del sistema
 import db from './library/hyperDBAdapter.js'
 import '../library/garbageCollector.js'
 import { MakeClient } from './library/waClient.js'
@@ -44,11 +42,7 @@ import { ModuleRegistry } from './library/modules.js'
 import { resolveMessage } from './library/message.js'
 import socketExtensions from '../library/socket.extensions.js'
 
-
-// Inicializar DB y Scrapers
 await db.start()
-
-
 
 const modules = await (new ModuleRegistry(env.MODULEREGISTRY)).start()
 
@@ -66,7 +60,10 @@ async function StartBot() {
 
         if (update.type === 'restart' || (update.type === 'error' && update.reasonCode === 428)) {
             console.log(chalk.yellow('ⓘ Conexión caída detectada. Reiniciando cliente...'))
-            return await mainBot.restart()
+            return await mainBot.restart({
+                folderPath: path.join(env.STORAGE, 'creds'),
+                ...env.connOptions
+            })
         }
 
         if (update.type === 'open') {
@@ -82,17 +79,17 @@ async function StartBot() {
                     const dateStr = new Date().toLocaleString('es-ES', { timeZone: 'America/Lima' })
 
                     const fakeQ = await mainBot.sock.fakeOrder(rootJid, {
-                        orderId: "AETHERO_V3",
+                        orderId: 'AETHERO_V3',
                         itemCount: 374,
-                        message: "Powered by Syllkom",
-                        orderTitle: "Aethero Store",
+                        message: 'Powered by Syllkom',
+                        orderTitle: 'Aethero Store',
                         price: 374,
-                        currency: "USD"
+                        currency: 'USD'
                     })
 
                     await mainBot.sock.sendMessage(rootJid, {
                         adMenu: {
-                            title: "Anuncio de Aethero",
+                            title: 'Anuncio de Aethero',
                             body: `▢ Aethero Conectado\n● Sistema en línea con éxito.\n- Fecha: ${dateStr}\n- PID: ${process.pid}`
                         }
                     }, { quoted: fakeQ })
@@ -110,11 +107,6 @@ async function StartBot() {
 
     const presenceStatus = global.config?.alwaysOnline ? 'available' : 'unavailable'
     await sock.sendPresenceUpdate(presenceStatus).catch(() => {})
-
-    sock.plugins = modules.getFolder('plugins')
-    sock.modules = modules
-
-    await socketExtensions(sock)
 
     sock.plugins = modules.getFolder('plugins')
     sock.modules = modules
@@ -142,29 +134,56 @@ async function StartBot() {
                 contextInfo: message.messageData?.contextInfo,
                 messageTimestamp: rawMessage.messageTimestamp,
                 broadcast: rawMessage.broadcast,
-                pushName: rawMessage.pushName,
+                pushName: rawMessage.pushName
             }
 
             if (m.contextInfo?.quotedMessage) {
-                const bot = sock.user.id.split(":")[0]
-                const key = { id: m.contextInfo?.stanzaId }
-                key.remoteJid = m.contextInfo?.remoteJid || m.raw.key.remoteJid
-                key.fromMe = m.contextInfo?.participant === bot + "@s.whatsapp.net"
-                key.participant = m.contextInfo?.participant
+                const botId = sock.user.id.split(':')[0]
+                const quotedId = m.contextInfo.stanzaId
+                const remoteJid = m.contextInfo.remoteJid || m.raw.key.remoteJid
+                const participant = m.contextInfo.participant || remoteJid
+                const fromMe = participant.split(':')[0] === botId || participant === sock.user.lid
 
-                const quotedMessage = m.contextInfo?.quotedMessage
-                const quoted = resolveMessage(quotedMessage)
+                let fullRaw = null
+                if (global.db && global.config?.saveHistory) {
+                    try {
+                        const chatIndex = await global.db.open('@history/' + remoteJid)
+                        const sender = chatIndex[quotedId] || participant
+                        const userHist = await global.db.open('@history/' + remoteJid + '/' + sender)
+                        if (Array.isArray(userHist.data)) {
+                            fullRaw = userHist.data.find(msg => msg.key?.id === quotedId) || null
+                        }
+                    } catch {}
+                }
+
+                const quotedKey = {
+                    remoteJid: remoteJid,
+                    fromMe: fromMe,
+                    id: quotedId,
+                    participant: participant
+                }
+
+                const realMessagePayload = fullRaw?.message || m.contextInfo.quotedMessage
+                const quoted = resolveMessage(realMessagePayload)
 
                 m.quoted = {
-                    key: key,
-                    message: quotedMessage,
-                    id: m.contextInfo?.stanzaId,
+                    key: quotedKey,
+                    id: quotedId,
                     type: quoted.type,
-                    get raw() { return { key, message: quotedMessage } },
-                    get messageData() { return quoted.messageData },
-                    contextInfo: quoted.messageData.contextInfo,
-                    quotedType: m.contextInfo?.quotedType,
                     category: quoted.category,
+                    get messageData() { return quoted.messageData },
+                    contextInfo: quoted.messageData?.contextInfo || m.contextInfo,
+                    quotedType: m.contextInfo?.quotedType,
+
+                    message: realMessagePayload,
+                    quotedMessage: m.contextInfo.quotedMessage,
+                    rawMessage: fullRaw?.message || m.contextInfo.quotedMessage,
+                    raw: fullRaw || { key: quotedKey, message: m.contextInfo.quotedMessage },
+                    fullRaw: fullRaw,
+                    fakeObj: {
+                        key: quotedKey,
+                        message: realMessagePayload
+                    }
                 }
             }
 
@@ -184,11 +203,11 @@ async function StartBot() {
                     })
                 }
             } catch (e) {
-                if (e.statusCode === 774)
+                if (e.statusCode === 774 || e.output?.statusCode === 428) {
                     throw new Error('Tumba la casa mami')
-                if (e.output?.statusCode === 428)
-                    throw new Error('Tumba la casa mami')
-                else console.error('main.js', e)
+                } else {
+                    console.error('main.js', e)
+                }
             }
         }
     })

@@ -1,4 +1,3 @@
-// ./library/socketExtensions.js
 import got from 'got'
 import { Jimp } from 'jimp'
 import { downloadMediaMessage, generateWAMessageContent, generateWAMessageFromContent } from '@whiskeysockets/baileys'
@@ -7,10 +6,44 @@ import { imageWebp, videoWebp } from './media/mediaConverter.js'
 import $base from '../core/library/hyperDBAdapter.js'
 
 import { buildCatalog, buildOrder, buildPayment, buildInvoice } from './builders/commerce.builder.js'
-import { buildLocationMenu, buildInteractiveMenu, buildCards, buildMediaMenu, buildPollSnapshot, buildProductMenu, buildAdMenu, executeAlbumMessage, buildOrderStatusMenu, buildLocationButtons } from './builders/interactive.builder.js'
+import { buildLocationMenu, buildInteractiveMenu, buildCards, buildMediaMenu, buildPollSnapshot, buildProductMenu, buildAdMenu, executeAlbumMessage, buildOrderStatusMenu, buildLocationButtons, buildPairedMedia } from './builders/interactive.builder.js'
 import { buildFakeOrder, buildFakePayment, buildFakeInvoice, buildFakeLink, buildFakeCatalog } from './builders/fakeContext.builder.js'
+import { sendStickerPack } from './builders/stickerPack.builder.js'
+import { AIRich, Toolkit as MessageToolkit } from './builders/aiRich.builder.js'
 
 const generateID = () => 'HK_' + Date.now().toString(36) + Math.random().toString(36).substring(2)
+
+async function recordHistory(sock, jid, msgId, message) {
+    if (!global.config?.saveHistory || !global.db || !jid || !msgId || !message) return
+    const botNum = sock.user?.id?.split(':')[0]
+    const senderId = jid.endsWith('@g.us') ? (botNum + '@s.whatsapp.net') : jid
+
+    try {
+        const chatIndex = await global.db.open('@history/' + jid)
+        chatIndex[msgId] = senderId
+
+        const userHist = await global.db.open('@history/' + jid + '/' + senderId)
+        userHist.data ||= []
+
+        const rawMsg = {
+            key: {
+                remoteJid: jid,
+                fromMe: true,
+                id: msgId,
+                participant: jid.endsWith('@g.us') ? (botNum + '@s.whatsapp.net') : undefined
+            },
+            message: message,
+            messageTimestamp: Math.floor(Date.now() / 1000)
+        }
+
+        const idx = userHist.data.findIndex(m => m.key?.id === msgId)
+        if (idx !== -1) userHist.data[idx] = rawMsg
+        else {
+            userHist.data.push(rawMsg)
+            if (userHist.data.length > 500) userHist.data.shift()
+        }
+    } catch {}
+}
 
 export default async function (sock) {
     try {
@@ -41,7 +74,10 @@ export default async function (sock) {
 
         sock.sendWAMContent = async (jid, message, options = {}) => {
             const gmessage = await generateWAMessageFromContent(jid, message, options)
-            return sock.relayMessage(jid, gmessage.message, { messageId: generateID() })
+            const id = options.messageId || generateID()
+            const res = await sock.relayMessage(jid, gmessage.message, { messageId: id })
+            await recordHistory(sock, jid, id, gmessage.message)
+            return res
         }
 
         sock.resizePhoto = async (data = {}) => {
@@ -66,7 +102,6 @@ export default async function (sock) {
                 if (resultFormat === 'base64') return outputBuffer.toString('base64')
                 else return outputBuffer
             } catch (e) {
-                console.error('Jimp Resize Error:', e.message)
                 return Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64')
             }
         }
@@ -114,26 +149,17 @@ export default async function (sock) {
         }
 
         sock.profilePictureUrl = getProfilePic
-        // sock.updateProfilePicture = getProfilePic
-        // sock.groupUpdateProfilePicture = getProfilePic
-        
-        // ./library/socket.extensions.js
 
         sock.updateProfilePicture = async (jid, img) => {
             try {
                 let buffer
-                if (Buffer.isBuffer(img)) {
-                    buffer = img
-                } else if (img?.url) {
-                    buffer = await sock.getBuffer(img.url)
-                } else if (typeof img === 'string') {
-                    buffer = await sock.getBuffer(img)
-                }
+                if (Buffer.isBuffer(img)) buffer = img
+                else if (img?.url) buffer = await sock.getBuffer(img.url)
+                else if (typeof img === 'string') buffer = await sock.getBuffer(img)
 
                 if (!buffer || !buffer.length) throw new Error('Buffer de imagen inválido')
 
                 const jimpImg = await Jimp.read(buffer)
-
                 const resized = jimpImg.scaleToFit({ w: 720, h: 720 })
                 const imgBuffer = await resized.getBuffer('image/jpeg')
 
@@ -161,7 +187,6 @@ export default async function (sock) {
                     ]
                 })
             } catch (e) {
-                console.error('Update Profile Picture Error:', e.message)
                 throw e
             }
         }
@@ -170,37 +195,35 @@ export default async function (sock) {
 
         sock.relayMessage = async (jid, message, options = {}) => {
             const isPrivate = jid.endsWith('@s.whatsapp.net') || jid.endsWith('@lid')
+            const msgId = options.messageId || generateID()
+            options.messageId = msgId
 
-            if (global.config.iconAI && isPrivate) {
+            if (global.config?.iconAI && isPrivate) {
                 options.additionalNodes = options.additionalNodes || []
                 const hasBotNode = options.additionalNodes.some(node => node.tag === 'bot')
-
                 if (!hasBotNode) {
                     options.additionalNodes.push({ tag: 'bot', attrs: { biz_bot: '1' } })
                 }
             }
 
-            return await originalRelayMessage(jid, message, options)
+            const res = await originalRelayMessage(jid, message, options)
+            await recordHistory(sock, jid, msgId, message)
+            return res || msgId
         }
 
         const originalSendMessage = sock.sendMessage
 
         sock.sendMessage = async (jid, content, options = {}) => {
-            // Sanitizador de citados
             if (options.quoted) {
-                if (options.quoted.raw) {
-                    options.quoted = options.quoted.raw
-                } else if (!options.quoted.key) {
-                    delete options.quoted
-                }
+                if (options.quoted.raw) options.quoted = options.quoted.raw
+                else if (!options.quoted.key) delete options.quoted
             }
 
             const msgId = options.messageId || generateID()
-
             let globalNodes = []
             const isPrivate = jid.endsWith('@s.whatsapp.net') || jid.endsWith('@lid')
 
-            if (global.config.iconAI && isPrivate) {
+            if (global.config?.iconAI && isPrivate) {
                 globalNodes.push({ tag: 'bot', attrs: { biz_bot: '1' } })
             }
 
@@ -210,7 +233,6 @@ export default async function (sock) {
 
             const mergeNodes = (builderNodes) => [...globalNodes, ...(builderNodes || [])]
 
-            // Commerce
             if (content.invoice) {
                 const { message, nodes } = await buildInvoice(sock, jid, content.invoice, options)
                 return await sock.relayMessage(jid, message, { messageId: msgId, additionalNodes: mergeNodes(nodes) })
@@ -227,14 +249,10 @@ export default async function (sock) {
                 const { message, nodes } = await buildPayment(sock, jid, content.payment, options)
                 return await sock.relayMessage(jid, message, { messageId: msgId, additionalNodes: mergeNodes(nodes) })
             }
-            
-            // messages
             if (content.album) {
                 options.additionalNodes = globalNodes.length > 0 ? globalNodes : undefined
                 return await executeAlbumMessage(sock, jid, content.album, options)
             }
-
-            // Interactive UI
             if (content.locationMenu) {
                 const { message, nodes } = await buildLocationMenu(sock, jid, content.locationMenu, options)
                 return await sock.relayMessage(jid, message, { messageId: msgId, additionalNodes: mergeNodes(nodes) })
@@ -259,10 +277,6 @@ export default async function (sock) {
                 const { message, nodes } = await buildAdMenu(sock, jid, content.adMenu, options)
                 return await sock.relayMessage(jid, message, { messageId: msgId, additionalNodes: mergeNodes(nodes) })
             }
-            if (content.productMenu) {
-                const { message, nodes } = await buildProductMenu(sock, jid, content.productMenu, options)
-                return await sock.relayMessage(jid, message, { messageId: msgId, additionalNodes: mergeNodes(nodes) })
-            }
             if (content.orderStatusMenu) {
                 const { message, nodes } = await buildOrderStatusMenu(sock, jid, content.orderStatusMenu, options)
                 return await sock.relayMessage(jid, message, { messageId: msgId, additionalNodes: mergeNodes(nodes) })
@@ -275,17 +289,41 @@ export default async function (sock) {
                 const { message, nodes } = await buildLocationButtons(sock, jid, content.locationButtons || content.buttonsMenu, options)
                 return await sock.relayMessage(jid, message, { messageId: msgId, additionalNodes: mergeNodes(nodes) })
             }
+            if (content.stickerPack) {
+                return await sendStickerPack(sock, jid, content.stickerPack, options)
+            }
+            if (content instanceof AIRich) {
+                return await content.send(jid, options)
+            }
+            if (content.aiRich) {
+                return await content.aiRich.send(jid, options)
+            }
+            if (content.pairedMedia) {
+                return await buildPairedMedia(sock, jid, content.pairedMedia, options)
+            }
 
             options.additionalNodes = globalNodes.length > 0 ? globalNodes : undefined
-            return await originalSendMessage(jid, content, options)
+            const sent = await originalSendMessage(jid, content, options)
+            if (sent?.message) {
+                await recordHistory(sock, jid, sent.key?.id || msgId, sent.message)
+            }
+            return sent
         }
 
-        // Contextos Falsos
         sock.fakeOrder = (jid, opts) => buildFakeOrder(sock, jid, opts)
         sock.fakeCatalog = (jid, data, opts) => buildFakeCatalog(sock, jid, data, opts)
         sock.fakePayment = (jid, opts) => buildFakePayment(sock, jid, opts)
         sock.fakeInvoice = (jid, data, opts) => buildFakeInvoice(sock, jid, data, opts)
         sock.fakeLink = (jid, data, opts) => buildFakeLink(sock, jid, data, opts)
+        
+        sock.sendStickerPack = (jid, data, opts) => sendStickerPack(sock, jid, data, opts)
+        
+        sock.AIRich = class extends AIRich {
+            constructor(opts) {
+                super(sock, opts)
+            }
+        }
+        sock.MessageToolkit = MessageToolkit
 
         sock.setReplyHandler = async (message, options = {}, expiresIn = 1000 * 60 * 15) => {
             if (!message?.key?.id) throw new Error('sock.setReplyHandler: key.id required')
@@ -324,7 +362,7 @@ export default async function (sock) {
         }
 
         sock.loadMessage = async (jid, id) => {
-            if (!global.config.saveHistory) return null
+            if (!global.config?.saveHistory) return null
             const chatIndex = await $base.open('@history/' + jid)
             const senderId = chatIndex[id]
             if (!senderId) return null
@@ -333,6 +371,8 @@ export default async function (sock) {
             return userHistory.data.find(m => m.key.id === id)
         }
 
-    } catch (e) { console.error('SocketExtensions Error:', e) }
+    } catch (e) {
+        console.error('SocketExtensions Error:', e)
+    }
     return sock
 }

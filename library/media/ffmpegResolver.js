@@ -1,12 +1,26 @@
 // ./library/media/ffmpegResolver.js
 import { execSync } from 'child_process'
+import { createRequire } from 'module'
 import fs from 'fs'
-import chalk from 'chalk'
 
+const require = createRequire(import.meta.url)
 let cachedFFmpegPath = null
+
+const KNOWN_PATHS = [
+    '/data/data/com.termux/files/usr/bin/ffmpeg',
+    '/usr/bin/ffmpeg',
+    '/usr/local/bin/ffmpeg'
+]
 
 export function getFFmpegPath() {
     if (cachedFFmpegPath) return cachedFFmpegPath
+
+    for (const p of KNOWN_PATHS) {
+        if (fs.existsSync(p)) {
+            cachedFFmpegPath = p
+            return cachedFFmpegPath
+        }
+    }
 
     try {
         const cmd = process.platform === 'win32' ? 'where ffmpeg' : 'which ffmpeg'
@@ -18,20 +32,12 @@ export function getFFmpegPath() {
     } catch {}
 
     try {
-        const staticMod = import('ffmpeg-static')
-        const staticPath = staticMod?.default || staticMod
+        const staticPath = require('ffmpeg-static')
         if (typeof staticPath === 'string' && fs.existsSync(staticPath)) {
             cachedFFmpegPath = staticPath
             return cachedFFmpegPath
         }
     } catch {}
-
-    console.warn(chalk.yellowBright('\nⓘ [Aviso FFmpeg]: No se detectó FFmpeg en el sistema.'))
-    if (process.platform === 'android' || process.env.PREFIX?.includes('com.termux')) {
-        console.warn(chalk.cyanBright('ⓘ En Termux ejecuta: pkg install ffmpeg\n'))
-    } else {
-        console.warn(chalk.cyanBright('ⓘ En Linux ejecuta: sudo apt install ffmpeg\n'))
-    }
 
     cachedFFmpegPath = 'ffmpeg'
     return cachedFFmpegPath

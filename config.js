@@ -33,7 +33,7 @@ global.config = {
     prefixes: ".¿?¡!#%&/,~@",
     saveHistory: true,
     autoRead: false,
-    silentConsole: true,
+    silentConsole: false,
     startupNotification: false,
     alwaysOnline: false,
     antiCall: true,
