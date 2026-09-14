@@ -1150,7 +1150,6 @@ await sock.sendMessage(m.chat.id, {
 | `buttons` | `array` | Lista de botones `{ text, id }` (o `{ displayText, buttonId }`). |
 
 > **Nota:** Puedes usar indistintamente la clave `locationButtons` o su alias `buttonsMenu` dentro de `sock.sendMessage`.
-```
 
 
 ### 6.10.1 Mensajes de Comercio Directos (`commerceBuilder.js`)
