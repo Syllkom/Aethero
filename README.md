@@ -6,12 +6,14 @@
 |---|---|
 | **Nombre** | Aethero |
 | **Versión** | 1.0.0 |
-| **Autor** | Syllkom |
+| **Autor** | Syllkom (Orwyth) |
 | **Licencia** | MIT |
 | **Módulos** | ESM (`"type": "module"`) |
-| **Node.js** | `>= 18.0.0` |
+| **Node.js** | `>= 22.5.0` (Requerido para `node:sqlite` nativo) |
 | **Motor WhatsApp** | `@whiskeysockets/baileys` |
-| **Base de datos** | `@syllkom/hyper-db` (LMDB nativo) |
+| **Base de datos** | `@syllkom/hyper-db` (V8 Atomic Engine) |
+| **Autenticación** | `node:sqlite` nativo (WAL Mode Granular Key-Store) |
+| **Compatibilidad** | Linux (x64/ARM64), Windows, macOS, Android (Termux) |
 
 ---
 
@@ -346,42 +348,19 @@ Rutas absolutas precalculadas, útiles cuando un plugin necesita referenciar dis
 
 ## 4. Autenticación y Base de Datos
 
-### 4.1. Autenticación: sesión única (`hyperDBAuth.js`)
 
-A diferencia del comportamiento por defecto de Baileys (`useMultiFileAuthState`, que escribe **decenas o cientos** de archivos `.json` por cada llave de sesión), Aethero implementa `useHyperDBAuthState()` en `core/library/hyperDBAuth.js`, que persiste **todas** las credenciales y llaves en un **único archivo JSON**:
+### 4.1. Autenticación: Motor Nativo SQLite (`node:sqlite`)
+
+En lugar de almacenar las claves en un archivo JSON monolítico que se reescribe por completo en cada mensaje, Aethero implementa un motor de autenticación estructurado mediante el módulo nativo **`node:sqlite`** (`session.sqlite`):
 
 ```
-storage/creds/main/session.json         # sesión "main" (por defecto)
-storage/subs/<sessionName>/creds/session.json   # sesiones alternas (multi-sesión)
+storage/creds/main/session.sqlite              # Base de datos SQLite de sesión principal
+storage/subs/<sessionName>/creds/session.sqlite # Sesiones aisladas de sub-bots
 ```
 
-**Características clave del implementación:**
-
-- **Escritura atómica:** cada guardado escribe primero a `session.json.tmp` y luego renombra (`fs.promises.rename`) al archivo final, evitando corrupción si el proceso se interrumpe a mitad de escritura.
-- **Cola de escritura (debounce natural):** si llega una nueva escritura mientras otra está en curso (`isWriting`), se marca `writeQueued = true` y se reintenta automáticamente al terminar la escritura activa — nunca se pierden actualizaciones de llaves ni se ejecutan escrituras en paralelo sobre el mismo archivo.
-- **Serialización compatible con Baileys:** usa `BufferJSON.replacer` / `BufferJSON.reviver` de `@whiskeysockets/baileys` para serializar correctamente los `Buffer` dentro de las credenciales.
-
-```js
-// core/library/hyperDBAuth.js (firma pública)
-export const useHyperDBAuthState = async (sessionName = 'main') => {
-    // ...
-    return {
-        state: { creds, keys: { get, set } },
-        saveCreds: () => { /* escritura atómica en background */ }
-    }
-}
-```
-
-Este objeto se conecta directamente a Baileys en `core/library/waClient.js`:
-
-```js
-let { state, saveCreds } = await useHyperDBAuthState(object.sessionName || 'main')
-const keyStore = makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }).child({ level: "fatal" }))
-
-sockConfig.auth = { creds: state.creds, keys: keyStore }
-const sock = makeWASocket(sockConfig)
-sock.ev.on('creds.update', saveCreds)
-```
+- **Escrituras Atómicas en Microsegundos:** Cada clave Signal (sender-keys de grupos con cientos de miembros, pre-keys, sesiones y app-state) se actualiza de forma granular en su propia fila de tabla (`creds` y `keys`) mediante árboles B-Tree con modo WAL activado (`PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;`). Esto elimina por completo el cuello de botella de I/O y el consumo excesivo de disco en grupos masivos.
+- **Cero Dependencias Externas:** Utiliza el motor integrado de Node.js (`import { DatabaseSync } from 'node:sqlite'`), sin requerir librerías pesadas ni compilación C++ como `better-sqlite3`.
+- **Auto-Migración Transparente:** Si existe un archivo `session.json` previo de Baileys, el adaptador migra automáticamente todas las credenciales y claves a `session.sqlite` en el primer arranque y renombra el archivo antiguo a `.bak` para evitar pérdidas de sesión.
 
 ### 4.2. Reconexión automática (motivo del error 428)
 
@@ -1342,6 +1321,88 @@ export default {
 | `sock.relayMessage` *(interceptado)* | — | Antes de delegar al `relayMessage` original de Baileys, inyecta el nodo `{ tag:'bot', attrs:{ biz_bot:'1' } }` en chats privados si `global.config.iconAI === true`. |
 | `sock.sendMessage` *(interceptado)* | — | Punto central de despacho: sanea `options.quoted` (acepta objetos con `.raw` del framework, elimina citados sin `.key` válido), enruta las claves especiales de esta sección, e inyecta el nodo `bot` igual que `relayMessage` cuando corresponde. Si `content` no coincide con ninguna clave especial, delega al `sendMessage` original de Baileys sin modificar el comportamiento estándar. |
 
+
+
+### 6.14. Suite Interactiva Meta AI / GenAI (`sock.AIRich`)
+
+`sock.AIRich` es un constructor fluido que permite generar mensajes nativos de **Meta AI / GenAI** (`botForwardedMessage` + `richResponseMessage`). Incluye omisión automática de advertencias de seguridad mediante generación de certificados criptográficos (`verificationMetadata`), resaltado de sintaxis, carruseles sociales y renderizado de aplicaciones Webview HTML completas.
+
+#### A. Inicialización y Envío Básico
+```javascript
+const rich = new sock.AIRich()
+    .setTitle('Aethero AI Engine')
+    .addBanner('https://i.ibb.co/banner.jpg')
+    .addText('*Analisis de Datos*\n- Estado: Completado\n=={Texto resaltado en amarillo}==')
+    .setFooter('Aethero Engine')
+
+await rich.send(m.chat.id)
+```
+
+#### B. Catálogo de Métodos y Primitivas
+
+| Método | Primitiva Protocolo | Parámetros y Descripción |
+|---|---|---|
+| `addBanner(url, opts)` | `GenAIImagePrimitive` | Renderiza una imagen de cabecera limpia de borde a borde sin barras de carga. |
+| `addProgressStatus(title, opts)` | `GenAIBotProgressStatusPrimitive` | Barra de estado con efecto de brillo/progreso (`isInProgress: true/false`). |
+| `addText(text, opts)` | `GenAIMarkdownTextUXPrimitive` | Texto con formato Markdown, resaltado `=={texto}==` y enlaces `[Texto](url)` o `[Texto](!url)`. |
+| `addHtml(html, opts)` | `GenAIaeacdsnwHtmlPrimitive` | Ejecuta aplicaciones y juegos interactivos en HTML/CSS/JS con Web Audio API y Canvas dentro del chat. |
+| `addCode(lang, code, opts)` | `GenAICodeUXPrimitive` | Bloque de código con tokenizador y resaltado sintáctico automático para JS, TS, Python, Java, C++, Rust, etc. |
+| `addTable(array, opts)` | `GenAITableUXPrimitive` | Tabla estructurada a partir de un arreglo bidimensional `[['Cabecera 1', 'Cabecera 2'], ['Dato 1', 'Dato 2']]`. |
+| `addCitations(text, list, opts)` | `GenAISearchCitationItem` | Texto con píldoras de citas interactivas `{{IE_CITE_0}}[1]{{/IE_CITE_0}}` y fuentes vinculadas. |
+| `addSource(sources, opts)` | `GenAISearchResultPrimitive` | Tarjetas de resultados de búsqueda con favicons y enlaces de referencia ("Ver detalles"). |
+| `addSingleProduct(product, opts)` | `GenAIProductItemCardPrimitive` | Tarjeta de producto individual horizontal con imagen, precio actual y precio original tachado. |
+| `addProduct(array, opts)` | `GenAIProductItemCardPrimitive` | Carrusel horizontal (`HScroll`) de productos comerciales. |
+| `addSocialCards(cards, opts)` | `GenAIPostPrimitive` | Carrusel deslizable de publicaciones para Pinterest, Instagram o TikTok con insignias oficiales. |
+| `addReels(reels, opts)` | `GenAIReelPrimitive` | Carrusel deslizable de Reels de video con avatar, contador de likes y reproductor. |
+| `addSystemWidgets(widgets, opts)` | `GenAI3PExtWidgetPrimitive` | Cuadrícula de widgets con botones de acción y comandos rápidos (`.menu`, `.play`, etc.). |
+| `addImageButton(logo, opts)` | `GenAIActionRowLayoutViewModel` | Fila interactiva con botón central de enlace (`OPEN_URL`) y logotipos circulares en LaTeX `[Logo 1] [Boton] [Logo 2]`. |
+| `addCompactEntity(entities, opts)` | `GenAICompactEntityPrimitive` | Tarjetas de acción directa para unirse a grupos (`GROUP`), seguir personas (`PERSON`) o agendar eventos. |
+| `addSuggest(array, opts)` | `GenAIFollowUpSuggestionPillPrimitive` | Fila de sugerencias interactivas tipo píldora. |
+| `addTip(text, opts)` | `GenAIMetadataTextPrimitive` | Caja de consejo informativa con prefijo de sistema. |
+| `addFOAText(text, opts)` | `FOATextPrimitive` | Texto en formato de anuncio/FOA. |
+
+#### C. Edición Progresiva en Vivo (Live Streaming)
+`AIRich` permite enviar un mensaje y editarlo progresivamente en tiempo real mediante `protocolMessage` tipo 14 sin enviar mensajes nuevos ni emitir notificaciones sonoras molestas:
+
+```javascript
+const rich = new sock.AIRich()
+    .setTitle('Aethero Stream')
+    .addProgressStatus('FASE 1: PROCESANDO...', { id: 'status', isInProgress: true })
+    .addText('Iniciando inferencia...', { id: 'content' })
+
+await rich.send(m.chat.id)
+
+await new Promise(r => setTimeout(r, 1500))
+
+rich.addProgressStatus('FASE 2: GENERANDO CODIGO...', { replace: 'status', isInProgress: true })
+rich.addCode('javascript', 'const test = true', { id: 'code_block' })
+await rich.sendEdit()
+
+await new Promise(r => setTimeout(r, 2000))
+
+rich.addProgressStatus('COMPLETADO', { replace: 'status', isInProgress: false })
+rich.addSuggest(['.menu', '.ping'])
+await rich.sendEdit()
+```
+
+### 6.16. Creador de Sticker Packs Oficiales (`content.stickerPack`)
+
+Permite empaquetar conjuntos de stickers WebP / Lottie en un archivo `.zip` con compresión `STORE`, generar miniaturas e íconos de bandeja (`tray_icon.webp` y JPEG de 252×252 píxeles mediante Jimp) y subirlos directamente a los servidores MMS de WhatsApp (`/mms/sticker-pack`) despachando un `stickerPackMessage` nativo.
+
+```javascript
+await sock.sendMessage(m.chat.id, {
+    stickerPack: {
+        name: 'Aethero Pack Oficial',
+        publisher: 'Orwyth',
+        description: 'Pack de stickers interactivos',
+        stickers: [
+            bufferSticker1,
+            'https://ejemplo.com/sticker2.webp',
+            { buffer: bufferSticker3, isAnimated: true }
+        ]
+    }
+}, { quoted: m.raw })
+```
 
 ---
 

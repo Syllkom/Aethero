@@ -1,4 +1,3 @@
-// ./handlers/m.sender.handler.js
 export default {
     enabled: true,
     priority: 0.12,
@@ -6,19 +5,25 @@ export default {
         const m = this
         const isFromMe = !!this.raw.key.fromMe
 
+        const botNum = sock.user?.id?.split(':')[0]
+        const rawLid = sock.user?.lid || ''
+        const botLid = rawLid ? (rawLid.includes(':') ? rawLid.split(':')[0] + '@lid' : rawLid) : (botNum ? botNum + '@s.whatsapp.net' : undefined)
+
         let senderLidId = isFromMe
-            ? (sock.user.lid.includes(':') ? sock.user.lid.split(':')[0] + '@lid' : sock.user.lid)
-            : Object.values(this.raw.key).find(v => typeof v === 'string' && v.endsWith('@lid')) || undefined
+            ? botLid
+            : Object.values(this.raw.key).find(v => typeof v === 'string' && v.endsWith('@lid')) || Object.values(this.raw.key).find(v => typeof v === 'string' && v.endsWith('@s.whatsapp.net')) || undefined
 
         let senderNumberId = Object.values(this.raw.key).find(v => typeof v === 'string' && v.endsWith('@s.whatsapp.net'))?.split('@')[0]
-            || sock.user?.id?.split(':')[0] || undefined
+            || this.raw.key?.participant?.split('@')[0]
+            || botNum
+            || undefined
 
         this.sender = {
-            id: senderLidId,
+            id: senderLidId || (senderNumberId ? senderNumberId + '@s.whatsapp.net' : undefined),
             number: senderNumberId,
             mentioned: this.contextInfo?.mentionedJid ?? [],
-            name: isFromMe ? (sock.user.name || 'Bot') : this.raw.pushName || 'Usuario',
-            user: '@' + (senderLidId?.split('@')[0] || ''),
+            name: isFromMe ? (sock.user?.name || 'Bot') : this.raw.pushName || 'Usuario',
+            user: '@' + (senderNumberId || senderLidId?.split('@')[0] || ''),
             roles: { root: false, owner: false, mod: false, vip: false, bot: false },
             get isAdmin() {
                 if (!m.__groupMetaData) return
@@ -62,9 +67,7 @@ export default {
                 }
 
                 Object.assign(this.sender.roles, userData.roles)
-            } catch (e) {
-                console.error('[Sender DB Roles Error]:', e)
-            }
+            } catch (e) {}
         }
 
         if (isFromMe || (this.bot?.id && this.sender.id === this.bot.id)) {

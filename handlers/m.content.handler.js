@@ -1,4 +1,3 @@
-// ./handlers/m.content.handler.js
 import { downloadMediaMessage } from '@whiskeysockets/baileys'
 
 export default {
@@ -9,35 +8,47 @@ export default {
         const m = this
 
         const MEDIA_TYPES = new Set([
-            'imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage', 'ptvMessage'])
+            'imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage', 'ptvMessage'
+        ])
         const isMediaType = (type) => MEDIA_TYPES.has(type) ? true : undefined
-        const getText = (type, messageData) => object[type] ? object[type](messageData) : ''
 
         const object = {
-            'conversation': (message) => message || '',
-            'imageMessage': (message) => message.caption || '',
-            'videoMessage': (message) => message.caption || '',
-            'extendedTextMessage': (message) => message.text || '',
-            'buttonsResponseMessage': (message) => {
-                return message.selectedButtonId || ''
-            },
-            'templateButtonReplyMessage': (message) => {
-                return message.selectedId || ''
-            },
+            'conversation': (message) => typeof message === 'string' ? message : (message?.text || ''),
+            'imageMessage': (message) => message?.caption || '',
+            'videoMessage': (message) => message?.caption || '',
+            'extendedTextMessage': (message) => message?.text || '',
+            'buttonsResponseMessage': (message) => message?.selectedButtonId || '',
+            'templateButtonReplyMessage': (message) => message?.selectedId || '',
             'interactiveResponseMessage': (message) => {
-                return message.nativeFlowResponseMessage
-                    ? (JSON.parse(message.nativeFlowResponseMessage
-                        .paramsJson)).id || '' : ''
+                try {
+                    return message?.nativeFlowResponseMessage?.paramsJson
+                        ? JSON.parse(message.nativeFlowResponseMessage.paramsJson).id || ''
+                        : ''
+                } catch {
+                    return ''
+                }
             },
+            'pollCreationMessage': (message) => message?.name || '',
+            'pollCreationMessageV2': (message) => message?.name || '',
+            'pollCreationMessageV3': (message) => message?.name || ''
         }
 
-        //--------------------
+        const getText = (type, messageData) => {
+            try {
+                const res = object[type] ? object[type](messageData) : ''
+                return typeof res === 'string' ? res : ''
+            } catch {
+                return ''
+            }
+        }
+
         let isMedia = isMediaType(this.type)
         let text = getText(this.type, this.messageData)
 
         this.content = {
-            isMedia: isMedia, text: text,
-            args: text?.trim().split(/ +/),
+            isMedia: isMedia,
+            text: text,
+            args: typeof text === 'string' && text.length > 0 ? text.trim().split(/ +/) : [],
             media: !isMedia ? undefined : {
                 mimeType: this.messageData?.mimetype || '',
                 fileName: this.messageData?.filename || '',
@@ -49,14 +60,14 @@ export default {
             }
         }
 
-        //--------------------
         if (this.quoted) {
             let isQuotedMedia = isMediaType(this.quoted.type)
             let quotedText = getText(this.quoted.type, this.quoted.messageData)
 
             this.quoted.content = {
-                isMedia: isQuotedMedia, text: quotedText,
-                args: quotedText?.trim().split(/ +/),
+                isMedia: isQuotedMedia,
+                text: quotedText,
+                args: typeof quotedText === 'string' && quotedText.length > 0 ? quotedText.trim().split(/ +/) : [],
                 media: !isQuotedMedia ? undefined : {
                     mimeType: this.quoted.messageData?.mimetype || '',
                     fileName: this.quoted.messageData?.filename || '',

@@ -1,4 +1,3 @@
-// ./handlers/m.bot.handler.js
 export default {
     enabled: true,
     priority: 0.1,
@@ -15,16 +14,16 @@ export default {
             }
         }
 
-        this.bot.id = sock.user.lid.includes(':') ? (sock.user.lid.split(':')[0] + '@lid') : sock.user.lid
+        const rawLid = sock.user?.lid || ''
+        this.bot.id = rawLid ? (rawLid.includes(':') ? (rawLid.split(':')[0] + '@lid') : rawLid) : (botNum ? botNum + '@s.whatsapp.net' : '')
         this.bot.user = '@' + (this.bot.id?.split('@')[0] || '')
         this.bot.number = botNum || undefined
-        this.bot.name = sock.user.name || ''
+        this.bot.name = sock.user?.name || ''
         this.bot.fromMe = this.raw.key.fromMe
-        
+
         const isBotAdmin = this.bot.isAdmin
         this.bot.roles = { root: true, owner: true, mod: true, vip: true, admin: isBotAdmin }
 
-        // Acciones del Bot
         this.bot.getDesc = async () => await sock.fetchStatus(this.bot.id).then(r => r?.status || '').catch(() => '')
         this.bot.getPhoto = async () => await sock.profilePictureUrl(this.bot.id, 'image').catch(() => 'https://files.catbox.moe/obz4b4.jpg')
         this.bot.setPhoto = async (image) => await sock.updateProfilePicture(this.bot.id, image)

@@ -872,3 +872,84 @@ export const executeAlbumMessage = async (sock, jid, medias, options = {}) => {
     }
     return album
 }
+
+export const buildPairedMedia = async (sock, jid, data = {}, options = {}) => {
+    const { prepareWAMessageMedia } = await import('@whiskeysockets/baileys')
+
+    const rawImage = data.image || data.img
+    const rawChild = data.video || data.audio || data.media
+
+    if (!rawImage || !rawChild) {
+        throw new Error('pairedMedia requiere tanto una imagen como un video o audio')
+    }
+
+    const imgBuffer = Buffer.isBuffer(rawImage) ? rawImage : await sock.getBuffer(rawImage)
+    const childBuffer = Buffer.isBuffer(rawChild) ? rawChild : await sock.getBuffer(rawChild)
+
+    if (!imgBuffer.length || !childBuffer.length) {
+        throw new Error('No se pudo procesar el buffer de imagen o medio para pairedMedia')
+    }
+
+    const isAudio = !!data.audio
+    const childKey = isAudio ? 'audio' : 'video'
+    const childProtoKey = isAudio ? 'audioMessage' : 'videoMessage'
+
+    const preparedImage = await prepareWAMessageMedia(
+        { image: imgBuffer },
+        { upload: sock.waUploadToServer }
+    )
+
+    const preparedChild = await prepareWAMessageMedia(
+        { [childKey]: childBuffer },
+        { upload: sock.waUploadToServer }
+    )
+
+    let ctxInfo = {
+        mentionedJid: options.mentions || data.mentions || [],
+        remoteJid: jid,
+        pairedMediaType: 5,
+        statusSourceType: 0,
+        ...(options.contextInfo || {})
+    }
+
+    if (options.quoted) {
+        const q = options.quoted?.raw || options.quoted
+        ctxInfo.stanzaId = q.key?.id
+        ctxInfo.participant = q.key?.participant || q.key?.remoteJid
+        ctxInfo.quotedMessage = q.message
+    }
+
+    const parentPayload = {
+        imageMessage: {
+            ...preparedImage.imageMessage,
+            caption: data.caption || data.text || '',
+            contextInfo: ctxInfo
+        }
+    }
+
+    const parentId = options.messageId || ('HK_' + Date.now().toString(36))
+    const parentResult = await sock.relayMessage(jid, parentPayload, { messageId: parentId })
+    const parentKey = { id: parentResult || parentId, remoteJid: jid, fromMe: true }
+
+    await new Promise(resolve => setTimeout(resolve, 400))
+
+    const childPayload = {
+        [childProtoKey]: {
+            ...preparedChild[childProtoKey],
+            contextInfo: {
+                pairedMediaType: 6,
+                statusSourceType: 0
+            }
+        },
+        messageContextInfo: {
+            messageAssociation: {
+                associationType: 12,
+                parentMessageKey: parentKey
+            }
+        }
+    }
+
+    await sock.relayMessage(jid, childPayload, {})
+
+    return parentResult || parentId
+}

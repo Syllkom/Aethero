@@ -49,7 +49,7 @@ const countFiles = (dir) => {
             if (fs.statSync(fullPath).isDirectory()) count += countFiles(fullPath)
             else if (file.endsWith('.js')) count++
         }
-    } catch (e) {}
+    } catch {}
     return count
 }
 
@@ -61,7 +61,7 @@ export const printNeofetch = () => {
     let pkg = { name: 'Aethero', version: '1.0.0' }
     try {
         pkg = JSON.parse(fs.readFileSync(path.resolve('./package.json'), 'utf-8'))
-    } catch (e) {}
+    } catch {}
 
     const pluginsCount = countFiles(path.resolve('./plugins'))
     const scrapersCount = countFiles(path.resolve('./library/scrapers'))
@@ -83,7 +83,7 @@ export const printNeofetch = () => {
         formatLine('CPU', cpuModel),
         formatLine('RAM (Sys)', `${usedRam} / ${totalRam}`),
         formatLine('RAM (Bot)', botRam),
-        formatLine('Database', 'Hyper-DB (LMDB Native)'),
+        formatLine('Database', 'Hyper-DB (V8 Atomic) + SQLite (Auth)'),
         formatLine('Plugins', `${pluginsCount} cargados`),
         formatLine('Scrapers', `${scrapersCount} cargados`),
         formatLine('Prefixes', global.config?.prefixes || 'No definido'),
@@ -110,10 +110,11 @@ export const runBootPrompt = async (storagePath = './storage') => {
     console.clear()
     printNeofetch()
 
+    const sessionSqlite = path.resolve(storagePath, 'creds/main/session.sqlite')
     const sessionFile = path.resolve(storagePath, 'creds/main/session.json')
     const oldCreds = path.resolve(storagePath, 'creds/creds.json')
 
-    if (fs.existsSync(sessionFile) || fs.existsSync(oldCreds)) {
+    if (fs.existsSync(sessionSqlite) || fs.existsSync(sessionFile) || fs.existsSync(oldCreds)) {
         return null
     }
 

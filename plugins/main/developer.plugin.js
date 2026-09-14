@@ -1,45 +1,77 @@
+// ./plugins/main/developer.plugin.js
 export default {
     command: true, usePrefix: true,
     case: ['creador', 'developer', 'creator'],
-    description: 'Comparte la información de contacto del desarrollador mediante una tarjeta vCard interactiva, facilitando el acceso directo a sus datos de contacto.',
+    description: 'Muestra la tarjeta de contacto oficial e interactiva del desarrollador mediante AIRich.',
     category: 'main',
-    usage: 'creador',
+    usage: ['creador'],
     script: async (m, { sock }) => {
-        const owners = {
-            syllname: "Syllkom - Owner",
-            syllnum: "573113825327",
-            syllmail: "Syllkom@proton.me",
-            syllurl: "https://syllkom.vercel.app"
+        await m.react('wait')
+
+        try {
+            const bannerUrl = 'https://files.catbox.moe/0pevpc.png'
+            const logoUrl = 'https://files.catbox.moe/my89of.png'
+
+            const rich = new sock.AIRich()
+                .setTitle('Aethero Engine Core')
+                .addBanner(bannerUrl)
+                .addCompactEntity([
+                    {
+                        title: 'Orwyth',
+                        subtitle: 'Full Stack Developer',
+                        secondarySubtitle: 'orwyth.site',
+                        image: logoUrl,
+                        id: 447451211890,
+                        url: 'https://wa.me/447451211890?text=Hola%20Orwyth',
+                        type: 'PERSON',
+                        action: 'MESSAGE',
+                        verified: true
+                    }
+                ])
+                .addText(
+                    '*Orwyth - Lead Developer*\n' +
+                    '- Rol: Creador y Arquitecto Principal de Aethero Framework\n' +
+                    '- Contacto directo: [Conversar por WhatsApp](https://wa.me/447451211890)\n' +
+                    '- Repositorio oficial: [Syllkom / Aethero](https://github.com/Syllkom/Aethero)'
+                )
+                .addCode('json', JSON.stringify({
+                    autor: 'Orwyth',
+                    github: 'Syllkom',
+                    proyecto: 'Aethero Framework',
+                    lenguaje: 'JavaScript / Node.js',
+                    arquitectura: 'Event-Driven Fork IPC',
+                    baseDeDatos: 'HyperDB V8 Atomic',
+                    contacto: 'orwyth@mail.ru'
+                }, null, 2))
+                .addSource([
+                    {
+                        title: 'Portfolio Personal',
+                        subtitle: 'orwyth.site',
+                        url: 'https://orwyth.site',
+                        icon: 'https://github.githubassets.com/favicons/favicon.png'
+                    },
+                    {
+                        title: 'GitHub Profile (Syllkom)',
+                        subtitle: 'github.com/Syllkom',
+                        url: 'https://github.com/Syllkom',
+                        icon: 'https://github.githubassets.com/favicons/favicon.png'
+                    }
+                ])
+                .addImageButton(logoUrl, {
+                    rightLogo: logoUrl,
+                    ctaText: 'Web Oficial',
+                    ctaUrl: 'https://orwyth.site',
+                    fontHeight: 24,
+                    padding: -5
+                })
+                .addSuggest(['root', 'developer', 'info', 'owner'])
+                .setFooter('Aethero Framework - Developed by Orwyth')
+
+            await rich.send(m.chat.id)
+            await m.react('done')
+        } catch (e) {
+            await m.react('error')
+            return m.reply('Error al enviar tarjeta de desarrollador: ' + e.message)
         }
-        
-        const Syllkom = [
-            'BEGIN:VCARD',
-            'VERSION:3.0',
-            `N:${owners.syllname};;;;`,
-            `FN:${owners.syllname}`,
-            `ORG:${owners.syllorg || 'HorekuOs'}`,
-            'TITLE:Developer',
-            `item1.TEL;waid=${owners.syllnum}:${owners.syllnum}`,
-            'item1.X-ABLabel:Móvil',
-            `X-WA-BIZ-NAME:${owners.syllname}`,
-            'X-WA-BIZ-DESCRIPTION:Full Stack Developer',
-            'END:VCARD'
-        ].join('\n')
-
-        const botPP = await sock.profilePictureUrl(sock.user.id, 'image').catch(() => 'https://files.catbox.moe/obz4b4.jpg')
-            const fakeQuoted = await sock.fakeOrder(m.chat.id, {
-                image: botPP,
-                message: 'Syllkom - Owner',
-                orderTitle: 'HorekuOs Store',
-                price: 37400000,
-                currency: 'ARS'
-            })
-
-        await sock.sendMessage(m.chat.id, { 
-            contacts: { 
-                displayName: owners.syllname, 
-                contacts: [{ vcard: Syllkom }] 
-            }
-        }, { quoted: fakeQuoted })
     }
 }
