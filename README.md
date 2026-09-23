@@ -6,7 +6,7 @@
 |---|---|
 | **Nombre** | Aethero |
 | **Versión** | 1.0.0 |
-| **Autor** | Syllkom (Orwyth) |
+| **Autors** | Syllkom (Orwyth) & Zepthh |
 | **Licencia** | MIT |
 | **Módulos** | ESM (`"type": "module"`) |
 | **Node.js** | `>= 22.5.0` (Requerido para `node:sqlite` nativo) |
