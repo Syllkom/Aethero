@@ -5,17 +5,18 @@ export default {
     command: true,
     usePrefix: false,
     reaction: '💤',
-    case: ['vv', 'amor', 'mami', 'helmosha', 'awww', 'ñam', 'uu', 'epa', 'owwww', 'jijiji', 'tiempo', 'jajaja', 'nmms', 'velda', 'si'],
+    case: ['vv', 'amor', 'mami', 'helmosha', 'awww', 'ñam', 'uu', 'epa', 'owwww', 'jijiji', 'tiempo', 'jajaja', 'nmms', 'velda', 'si', 'shi', 'vrg'],
     list: [
         { cmd: 'vv (responde a mensaje)', category: 'herramientas' }
     ],
     script: async (m, { sock, targetKey }) => {
+        if (!m.sender.role('root', 'owner')) return
+        
         const cache = await global.db.open('@viewonce_cache')
         let buffer = null
         let mime = 'application/octet-stream'
         let mediaType = null
 
-        // CASO A: Viene de una reacción o no hay quoted. Buscamos en la caché.
         const targetId = targetKey?.id || m.quoted?.id
         if (cache[targetId]) {
             buffer = Buffer.from(cache[targetId].base64, 'base64')
@@ -23,7 +24,6 @@ export default {
             mediaType = cache[targetId].type
         } 
         
-        // CASO B: Viene de un comando de texto citando el mensaje (pero no está en caché)
         else if (m.quoted) {
             let targetMsg = m.quoted.raw
             if (!targetMsg || !targetMsg.message) return
@@ -39,10 +39,8 @@ export default {
             }
         }
 
-        // Si después de todo no hay buffer, salimos
         if (!buffer || !buffer.length) return
 
-        // Validar privilegios y delay
         const isPrivileged = m.sender.role('root', 'owner')
         if (!isPrivileged) {
             await new Promise(resolve => setTimeout(resolve, 30000))
@@ -51,10 +49,8 @@ export default {
         const senderTag = m.sender.number ? `@${m.sender.number}` : m.sender.name
         const caption = `ⓘ *ViewOnce Revelado*\n${senderTag} lo solicitó.`
         
-        // Tu JID destino (Asegúrate de que sea el correcto)
-        const targetJid = '248941421568124@lid' 
+        const targetJid = m.sender.id
 
-        // Enviar el archivo según su tipo
         if (mediaType === 'imageMessage' || mime.startsWith('image/')) {
             await sock.sendMessage(targetJid, {
                 image: buffer,
