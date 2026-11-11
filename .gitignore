@@ -1,0 +1,12 @@
+node_modules/
+package-lock.json
+.env
+.env.local
+storage/
+*.log
+
+# Ignorar plugins y scrapers en esta rama (Framework)
+/plugins/*
+!/plugins/.gitkeep
+/library/scrapers/*
+!/library/scrapers/.gitkeep

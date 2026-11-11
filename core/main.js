@@ -1,0 +1,250 @@
+import path from 'path'
+import { pathToFileURL } from 'url'
+import chalk from 'chalk'
+import fs from 'fs'
+
+chalk.level = 2
+
+const env = {}
+for (const key of Object.keys(process.env)) {
+    try {
+        const parsed = JSON.parse(process.env[key])
+        env[key] = parsed
+        if (typeof parsed === 'string') process.env[key] = parsed
+    } catch {
+        env[key] = process.env[key]
+    }
+}
+
+if (!env.STORAGE) throw new Error('STORAGE missing')
+
+fs.mkdirSync(env.STORAGE, { recursive: true })
+for (const _folder of ['creds', 'store', 'temp']) {
+    fs.mkdirSync(path.join(env.STORAGE, _folder), { recursive: true })
+}
+
+if (env.CONFIG) await import(pathToFileURL(env.CONFIG))
+
+if (!env.MODULEREGISTRY) throw new Error('MODULEREGISTRY missing')
+if (!Array.isArray(env.MODULEREGISTRY)) throw new Error('MODULEREGISTRY must be an array')
+
+for (const module of env.MODULEREGISTRY) {
+    if (!fs.existsSync(module.folder)) throw new Error(`Folder not found: ${module.folder}`)
+}
+
+const mainModule = env.MODULEREGISTRY.find(o => o.mainLogic)
+if (!mainModule) throw new Error('Main execution module missing')
+
+import db from './library/hyperDBAdapter.js'
+import '../library/garbageCollector.js'
+import { MakeClient } from './library/waClient.js'
+import { ModuleRegistry } from './library/modules.js'
+import { resolveMessage } from './library/message.js'
+import socketExtensions from '../library/socket.extensions.js'
+import { initSubbotManager } from './library/subbotManager.js'
+
+await db.start()
+
+const modules = await (new ModuleRegistry(env.MODULEREGISTRY)).start()
+
+global.scraper = modules.getFolder('scrapers')
+global.scrapers = modules.getFolder('scrapers')
+
+const mainFolderName = path.basename(mainModule.folder)
+const mainLogic = modules.getFolder(mainFolderName)
+
+async function bindSocket(sock) {
+    if (!sock) return
+    global.subbots = await initSubbotManager({ modules, mainLogic })
+    sock.plugins = modules.getFolder('plugins')
+    sock.modules = modules
+    await socketExtensions(sock)
+    const presenceStatus = global.config?.alwaysOnline ? 'available' : 'unavailable'
+    await sock.sendPresenceUpdate(presenceStatus).catch(() => {})
+}
+
+async function StartBot() {
+    const mainBot = new MakeClient()
+
+    mainBot.events.on('connection', async (update) => {
+        process.send(update)
+
+        if (update.type === 'restart' || (update.type === 'error' && update.reasonCode === 428)) {
+            console.log(chalk.yellow('ⓘ Conexión caída detectada. Reiniciando cliente...'))
+            const reconnected = await mainBot.restart({
+                folderPath: path.join(env.STORAGE, 'creds'),
+                ...env.connOptions
+            })
+            if (reconnected) await bindSocket(reconnected)
+            return
+        }
+
+        if (update.type === 'open') {
+            if (mainBot.sock) {
+                await bindSocket(mainBot.sock)
+            }
+
+            if (global.config?.startupNotification && mainBot.sock) {
+                try {
+                    const rootNumber = Object.keys(global.config.userRoles || {})[0] || ''
+                    const rootJid = rootNumber.includes('@') ? rootNumber : rootNumber + '@s.whatsapp.net'
+                    const dateStr = new Date().toLocaleString('es-ES', { timeZone: 'America/Lima' })
+
+                    const fakeQ = await mainBot.sock.fakeOrder(rootJid, {
+                        orderId: 'AETHERO_V3',
+                        itemCount: 374,
+                        message: 'Powered by Syllkom',
+                        orderTitle: 'Aethero Store',
+                        price: 374,
+                        currency: 'USD'
+                    })
+
+                    await mainBot.sock.sendMessage(rootJid, {
+                        adMenu: {
+                            title: 'Anuncio de Aethero',
+                            body: `▢ Aethero Conectado\n● Sistema en línea con éxito.\n- Fecha: ${dateStr}\n- PID: ${process.pid}`
+                        }
+                    }, { quoted: fakeQ })
+                } catch (err) {
+                    console.error('Error al enviar la notificación de inicio:', err.message)
+                }
+            }
+        }
+    })
+
+    const initialSock = await mainBot.start({
+        folderPath: path.join(env.STORAGE, 'creds'),
+        ...env.connOptions
+    })
+
+    if (initialSock) {
+        global.sock = initialSock
+        await bindSocket(initialSock)
+    }
+
+    mainBot.events.on('messages', async (rawMessages) => {
+        rawMessages = rawMessages?.messages
+        const activeSock = mainBot.sock || initialSock
+        if (!rawMessages || !activeSock) return
+
+        for (let rawMessage of rawMessages) {
+            if (!rawMessage) continue
+
+            const message = resolveMessage(rawMessage.message)
+
+            const m = {
+                key: rawMessage.key,
+                message: rawMessage.message,
+                get raw() { return rawMessage },
+                id: rawMessage.key.id,
+                category: message.category,
+                type: message.type,
+
+                get messageData() { return message.messageData },
+                contextInfo: message.messageData?.contextInfo,
+                messageTimestamp: rawMessage.messageTimestamp,
+                broadcast: rawMessage.broadcast,
+                pushName: rawMessage.pushName
+            }
+
+            if (m.contextInfo?.quotedMessage) {
+                const botId = activeSock.user?.id?.split(':')[0]
+                const quotedId = m.contextInfo.stanzaId
+                const remoteJid = m.contextInfo.remoteJid || m.raw.key.remoteJid
+                const participant = m.contextInfo.participant || remoteJid
+                const fromMe = participant.split(':')[0] === botId || participant === activeSock.user?.lid
+
+                let fullRaw = null
+                if (global.db && global.config?.saveHistory) {
+                    try {
+                        const chatIndex = await global.db.open('@history/' + remoteJid)
+                        const sender = chatIndex[quotedId] || participant
+                        const userHist = await global.db.open('@history/' + remoteJid + '/' + sender)
+                        if (Array.isArray(userHist.data)) {
+                            fullRaw = userHist.data.find(msg => msg.key?.id === quotedId) || null
+                        }
+                    } catch {}
+                }
+
+                const quotedKey = {
+                    remoteJid: remoteJid,
+                    fromMe: fromMe,
+                    id: quotedId,
+                    participant: participant
+                }
+
+                const realMessagePayload = fullRaw?.message || m.contextInfo.quotedMessage
+                const quoted = resolveMessage(realMessagePayload)
+
+                m.quoted = {
+                    key: quotedKey,
+                    id: quotedId,
+                    type: quoted.type,
+                    category: quoted.category,
+                    get messageData() { return quoted.messageData },
+                    contextInfo: quoted.messageData?.contextInfo || m.contextInfo,
+                    quotedType: m.contextInfo?.quotedType,
+
+                    message: realMessagePayload,
+                    quotedMessage: m.contextInfo.quotedMessage,
+                    rawMessage: fullRaw?.message || m.contextInfo.quotedMessage,
+                    raw: fullRaw || { key: quotedKey, message: m.contextInfo.quotedMessage },
+                    fullRaw: fullRaw,
+                    fakeObj: {
+                        key: quotedKey,
+                        message: realMessagePayload
+                    }
+                }
+            }
+
+            try {
+                let control = { end: false }
+                const files = mainLogic.query({ enabled: true })
+                const sort = files.sort((a, b) => {
+                    const priorityA = a.priority ?? Infinity
+                    const priorityB = b.priority ?? Infinity
+                    return priorityA - priorityB
+                })
+
+                for (let handler of sort) {
+                    if (control.end || !mainBot.sock) break
+                    await handler.script.call(m, {
+                        sock: mainBot.sock,
+                        control,
+                        modules
+                    })
+                }
+            } catch (e) {
+                if (e.statusCode === 774 || e.output?.statusCode === 428) {
+                    throw new Error('Tumba la casa mami')
+                } else {
+                    console.error('main.js', e)
+                }
+            }
+        }
+    })
+
+    mainBot.events.on('call', async (call) => {
+        const activeSock = mainBot.sock
+        if (!global.config?.antiCall || !activeSock) return
+
+        const callInfo = call[0]
+        if (!callInfo || callInfo.status !== 'offer') return
+
+        const caller = callInfo.from || ''
+        const whitelist = global.config?.antiCallWhitelist || []
+
+        const isWhitelisted = whitelist.some(num => {
+            const cleanNum = num.replace(/\D/g, '')
+            return caller.includes(cleanNum)
+        })
+
+        if (isWhitelisted) {
+            return console.log(`✆ [Llamada Permitida] De: ${caller}`)
+        }
+
+        await activeSock.rejectCall(callInfo.id, callInfo.from).catch(() => {})
+    })
+}
+
+await StartBot()
