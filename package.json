@@ -40,7 +40,7 @@
     "@hapi/boom": "^10.0.1",
     "@napi-rs/canvas": "^1.0.3",
     "@syllkom/hyper-db": "github:Syllkom/hyper-db",
-    "baileys-ipc": "file:./core/baileys-ipc",
+    "baileys-ipc": "github:Syllkom/baileys-ipc-fork",
     "@whiskeysockets/baileys": "latest",
     "acrcloud": "^1.4.0",
     "btch-downloader": "^6.3.6",
