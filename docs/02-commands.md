@@ -1,42 +1,59 @@
-# Catálogo de Comandos
+# Catalogo de Comandos (Essentials)
 
-A continuación, se detallan los comandos incluidos por defecto en la versión **Aethero Essentials**. Recuerda que todos los comandos usan los prefijos configurados (por defecto: `.`).
+Este es el inventario de comandos disponibles en la version Essentials de Aethero. Todos utilizan los prefijos configurados (por defecto `.`).
 
-### Group (Administración de Grupos)
-- `kick ‹@user›` : Expulsa a un usuario del grupo.
-- `promote ‹@user›` : Asciende a un usuario a administrador.
-- `demote ‹@user›` : Quita el rol de administrador a un usuario.
-- `tagall` : Menciona a todos los participantes del grupo.
-- `welcome` : Configura el mensaje de bienvenida/despedida.
-- `antilink` : Activa/desactiva el borrado automático de enlaces.
-- `rules` : Establece las reglas del grupo.
-- `setpp` : Cambia la foto de perfil del grupo.
+## Downloader (Descargas)
+- **.apk / .appteka** ‹nombre› : Busca y descarga aplicaciones desde la tienda Appteka.
+- **.fb / .facebook** ‹url› : Descarga videos de Facebook en HD/SD.
+- **.instagram / .ig** ‹url› : Descarga fotos, reels y carruseles de Instagram.
+- **.tiktok** ‹url/busqueda› : Descarga videos de TikTok sin marca de agua o busca videos.
+- **.ytmp3 / .ytmp4** ‹url/busqueda› : Descarga audio o video de YouTube.
+- **.play** ‹busqueda› : Busca y reproduce (descarga) musica de YouTube.
+- **.spotify** ‹url/busqueda› : Descarga canciones de Spotify.
 
-### Downloader (Descargas)
-- `tiktok ‹url›` : Descarga videos de TikTok sin marca de agua.
-- `ytmp3 ‹url/búsqueda›` : Descarga audio de YouTube en MP3.
-- `ytmp4 ‹url/búsqueda›` : Descarga video de YouTube en MP4.
-- `fb ‹url›` : Descarga videos de Facebook.
-- `apk ‹nombre›` : Busca y descarga aplicaciones desde Appteka.
+## Group (Administracion de Grupos)
+- **.kick / .expulsar** ‹@user› : Expulsa a un miembro del grupo.
+- **.promote / .demote** ‹@user› : Otorga o retira privilegios de administrador.
+- **.tagall / .todos** ‹texto› : Menciona a todos los miembros con un mensaje.
+- **.hidetag / .notificar** ‹media/texto› : Notifica a todos de forma invisible.
+- **.group / .abrir / .cerrar** : Abre o cierra la escritura del grupo.
+- **.ghosts / .fantasmas** : Analiza la inactividad y elimina usuarios fantasmas.
+- **.setpp** : Cambia la foto de perfil del grupo o del bot.
+- **.rules** : Muestra o configura las reglas del grupo (genera imagen con Canvas).
 
-### Tools (Herramientas Útiles)
-- `sticker ‹media›` : Convierte imágenes, videos o stickers a formato WebP.
-- `sreact` : Sistema de stickers personalizados para reaccionar a mensajes (usa .sreact on/off).
-- `vv (responder)` : Revela un mensaje de "Ver una vez" (solo owners).
-- `toimg` : Convierte un sticker estático a imagen (JPG/PNG).
-- `tourl` : Sube un archivo multimedia y devuelve el enlace directo.
-- `whatmusic` : Identifica la canción de un audio o video.
+## Main (Sistema y Configuracion)
+- **.ping** : Verifica la latencia y el estado del bot.
+- **.info** : Muestra estadisticas (RAM, CPU, Plugins cargados).
+- **.menu** : Muestra el menu de comandos disponibles.
+- **.creator** : Muestra la tarjeta de contacto del desarrollador.
+- **.invite / .join** ‹link› : Solicita unir el bot a un grupo mediante link.
+- **.report** : Envia un reporte de bug con media a los owners.
+- **.settings** : Configuraciones generales del bot y del grupo.
+- **.subbot** : Crea, lista o elimina sub-bots conectados.
 
-### Owner (Solo para Dueños/Root)
-- `shell` : Ejecuta código JavaScript directamente (usando > o $).
-- `edit ‹texto›` : Edita un mensaje citado sin dejar el rastro de "mensaje editado".
-- `dmsg` : Elimina un mensaje citado sin dejar rastro (usando el bypass de protocolo).
-- `subbot` : Crea y gestiona sub-bots vinculados (Requiere número).
-- `private` / `public` : Cambia el bot entre modo privado (solo owners) y público.
-- `ban` : Banea a un usuario de usar los comandos del bot.
+## Tools (Herramientas)
+- **.sticker / .s** : Convierte imagenes o videos a formato sticker.
+- **.toimg** : Convierte un sticker estatico a imagen.
+- **.tomp4 / .tovid** : Convierte un sticker a video, o fusiona imagen/video con un audio.
+- **.tomp3** : Extrae el audio de un video y lo convierte a MP3.
+- **.get / .fetch** ‹url› : Extrae el contenido de cualquier URL (detecta imagen, video, audio, html).
+- **.tourl** : Sube un archivo multimedia a la nube y devuelve el enlace.
+- **.whatmusic** : Identifica la cancion de un audio o video.
+- **.whois / .stalk** : Muestra informacion tecnica y foto de perfil de un usuario.
+- **.tr / .traducir** ‹idioma› ‹texto› : Traduce texto usando MyMemory API.
+- **.sreact** : Stickers personalizados para reaccionar (usa `.sreact on/off`).
+- **.vv / .velda** (o reaccionar con `💤`) : Revela mensajes de "Ver una vez" (Solo Owner).
 
-### Main (Sistema)
-- `ping` : Verifica la latencia y el tiempo de actividad del bot.
-- `menu` : Muestra el menú de comandos disponibles.
-- `info` : Muestra información del sistema (RAM, CPU, Plugins cargados).
-- `report` : Envía un reporte de fallo a los owners.
+## Owner (Comandos de Root)
+- **.owner / .deowner** : Otorga o revoca permisos de owner.
+- **.ban / .unban** : Bloquea o desbloquea usuarios del bot.
+- **.botconfig** : Configura auto-lectura, anti-llamadas, etc.
+- **.public / .private** : Alterna entre modo publico y privado.
+- **.dmsg** ‹citar› : Elimina mensajes de otros sin ser admin (Bypass Protocol).
+- **.edit** ‹texto› : Edita mensajes sin dejar rastro de "editado".
+- **.dump** : Extrae el JSON crudo de un mensaje (util para debug).
+- **.rich** : Genera tareas progresivas en vivo con Meta AI.
+- **.> / .=> / .$** : Shell interactivo (ejecuta JS o comandos de consola).
+
+## Events (Automatizaciones Silenciosas)
+- **Eventos de Grupo:** El bot detectara y actuara automaticamente en eventos como cambios de administrador, cambios de foto de grupo, apertura/cierre de grupo, etc.
