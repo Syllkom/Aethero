@@ -1,9 +1,0 @@
-{
-  "name": "baileys-ipc",
-  "version": "1.0.0",
-  "type": "module",
-  "main": "BaileysIPC/index.js",
-  "exports": {
-    ".": "./BaileysIPC/index.js"
-  }
-}
