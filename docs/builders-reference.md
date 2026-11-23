@@ -559,7 +559,9 @@ await rich.send(m.chat.id)
 | Método | Primitiva Protocolo | Parámetros y Descripción |
 |---|---|---|
 | `addBanner(url, opts)` | `GenAIImagePrimitive` | Renderiza una imagen de cabecera limpia de borde a borde sin barras de carga. |
-| `addProgressStatus(title, opts)` | `GenAIBotProgressStatusPrimitive` | Barra de estado con efecto de brillo/progreso (`isInProgress: true/false`). |
+| `addProgressStatus(title, opts)` | `GenAIBotProgressStatusPrimitive` | Barra de estado con efecto de brillo/progreso (`isInProgress: true/false`, `icon`: p. ej. `'THINKING'`; por defecto `null`). |
+| `addSteps(entries, opts)` | `GenAIMetadataTextPrimitive` + `GenAIStepThoughtEntry` | Línea de texto que abre una hoja **Steps** con pasos de razonamiento (título, descripción, fuentes e imágenes). Ver sección D. |
+| `addStepsProgress(entries, opts)` | `GenAIBotProgressStatusPrimitive` + `GenAIStepThoughtEntry` | Igual que `addSteps`, pero el disparador es una barra de estado en curso con icono `THINKING`. Ver sección D. |
 | `addText(text, opts)` | `GenAIMarkdownTextUXPrimitive` | Texto con formato Markdown, resaltado `=={texto}==` y enlaces `[Texto](url)` o `[Texto](!url)`. |
 | `addHtml(html, opts)` | `GenAIaeacdsnwHtmlPrimitive` | Ejecuta aplicaciones y juegos interactivos en HTML/CSS/JS con Web Audio API y Canvas dentro del chat. |
 | `addCode(lang, code, opts)` | `GenAICodeUXPrimitive` | Bloque de código con tokenizador y resaltado sintáctico automático para JS, TS, Python, Java, C++, Rust, etc. |
@@ -600,6 +602,66 @@ rich.addProgressStatus('COMPLETADO', { replace: 'status', isInProgress: false })
 rich.addSuggest(['.menu', '.ping'])
 await rich.sendEdit()
 ```
+
+#### D. Pasos de razonamiento ("Steps")
+
+Dos variantes del mismo rich: un mensaje de `AIRich` que, al tocarlo, abre una hoja inferior **Steps** con una lista de pasos. Cada paso puede tener descripción, enlaces a fuentes (píldoras con favicon) e imágenes.
+
+```javascript
+const rich = new sock.AIRich().addSteps([
+    'Buscando información',                                   // solo título
+    { header: 'Analizando', body: 'Comparando resultados' },  // con descripción
+    {
+        header: 'Fuentes',
+        body: 'Revisé dos páginas',
+        sources: [
+            'https://github.com',                             // solo URL: título y favicon automáticos
+            { url: 'https://en.wikipedia.org/wiki/Coffee', title: 'Coffee — Wikipedia' }
+        ]
+    },
+    { header: 'Resultado', body: 'Con imagen', images: ['https://ejemplo.com/foto.jpg'] }
+])
+
+await rich.send(m.chat.id)
+```
+
+**Variante con progreso.** El disparador es una barra de estado en curso con icono `THINKING` (precedida de un texto vacío):
+
+```javascript
+await new sock.AIRich()
+    .addStepsProgress(pasos, { title: 'Pensando…' })
+    .send(m.chat.id)
+```
+
+**Forma de cada paso (`entries`)**
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `header` (o `title`) | `string` | **Obligatorio.** Título del paso. |
+| `body` (o `description`) | `string` | Descripción bajo el título. |
+| `sources` | `(string \| object)[]` | `{ url, title?, favicon? }`. Si pasas solo la URL, el título es el dominio y el favicon `<origen>/favicon.ico`. |
+| `images` | `(url \| Buffer \| object)[]` | `{ url, name?, width?, height?, previewWidth?, previewHeight?, mimeType? }`. Por defecto 800×450 (vista previa) y 1600×900 (completa), `image/jpeg`. Un `Buffer` se sube a WhatsApp. |
+
+Un paso puede combinar `body`, `sources` e `images` a la vez. `entries` puede ser un solo paso o un arreglo; si está vacío o falta algún `header`, lanza `TypeError`.
+
+**Opciones comunes**
+
+| Opción | Por defecto | Descripción |
+|---|---|---|
+| `title` | `'full step'` | Texto del disparador. |
+| `screenTitle` | `'Thoughts'` | Título de la hoja. |
+| `tabId` / `tabHeader` | `'steps'` / `'Steps'` | Identificador y rótulo de la pestaña. |
+| `resolveUrl` | `false` | Descarga las imágenes por URL y las sube a WhatsApp. |
+| `contextInfo` | valores probados | Sobrescribe el `contextInfo` del mensaje; `false` no aplica ninguno. Por defecto: `isForwarded`, `forwardingScore: 3`, `forwardOrigin: 4`, `botJid '259786046210223@bot'` y `botMessageSharingInfo`. |
+| `id`, `replace` | | Como en el resto de métodos (`addSteps` admite además `insertAt`). |
+| `isInProgress`, `icon` | `true`, `'THINKING'` | Solo `addStepsProgress`. |
+
+Detalles:
+
+- Llamar otra vez con el mismo `tabId` **reemplaza** la hoja anterior en lugar de duplicarla, así puedes ir añadiendo pasos con `sendEdit()`.
+- En `addStepsProgress`, usa `replace: 'id'` para sustituir la barra de estado sin añadir otro texto vacío.
+- El `contextInfo` por defecto se aplica a **todo** el mensaje; si combinas estos riches con otros contenidos de `AIRich`, esos valores también se usan.
+- ⚠️ El payload generado coincide con el JSON probado, pero la renderización final depende de la versión de WhatsApp del destinatario.
 
 ### 6.16. Creador de Sticker Packs Oficiales (`content.stickerPack`)
 
