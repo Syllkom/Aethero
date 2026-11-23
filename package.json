@@ -1,7 +1,7 @@
 {
   "name": "Aethero",
   "version": "1.0.0",
-  "description": "Framework Event-Driven modular para bots de WhatsApp (Node.js ≥18.x) con aislamiento de procesos y pipeline de handlers encadenados.",
+  "description": "Framework Event-Driven modular para bots de WhatsApp (Node.js ≥22.13) con aislamiento de procesos y pipeline de handlers encadenados.",
   "type": "module",
   "main": "index.js",
   "scripts": {
