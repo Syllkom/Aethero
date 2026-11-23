@@ -54,9 +54,9 @@ Se aplican una sola vez al conectar y los builders se importan de forma estátic
 
 Cada recarga en caliente deja el módulo anterior en memoria, y `inspectPlugins()` reimporta todos los plugins en cada llamada. Reinicia tras muchas ediciones y cachea el resultado de `inspectPlugins`.
 
-## Los mensajes "ver una vez" no se guardan
+## No puedo recuperar un mensaje "ver una vez"
 
-El handler `m.viewonce.cache.js` no termina en `.handler.js` y no se carga. Renómbralo.
+El framework no guarda caché de estos mensajes y el historial de Baileys tampoco conserva el contenido. Solo es posible leerlo cuando alguien **cita** el mensaje original (el medio llega dentro de la cita). Ver [`m.getQuotedMedia()`](message-object.md).
 
 ## Stickers o conversión de video fallan
 

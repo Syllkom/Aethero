@@ -55,7 +55,6 @@ users['51999999999@lid'].banned = true   // persistido automáticamente
 | `@reply:Handler` | Flujos de respuesta pendientes. Ver [Flujos de respuesta](reply-flows.md). |
 | `@history/<jid>` | Índice `msgId → senderId` del chat. |
 | `@history/<jid>/<senderId>` | `{ data: [...] }` con hasta 500 mensajes crudos. |
-| `@viewonce_cache` | Caché de mensajes "ver una vez" (máx. 50). ⚠️ Su handler hoy no se carga, ver [Handlers](handlers.md#handlers-incluidos). |
 | `@plugins_db[:<usuario>]` | Base por defecto de los plugins de reacción. |
 
 ### Alcance por sub-bot

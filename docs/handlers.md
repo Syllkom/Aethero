@@ -7,7 +7,6 @@ Un handler es un paso del pipeline. Todos los mensajes pasan por los handlers ha
 | `priority` | Archivo | Qué hace |
 |---|---|---|
 | `0.02` | `m.content.handler.js` | Añade `m.content` (y `m.quoted.content`). |
-| `0.03` | `m.viewonce.cache.js` | Cachea mensajes "ver una vez" en `@viewonce_cache`. ⚠️ **No se carga**: su nombre no termina en `.handler.js`. Renómbralo a `m.viewonce.cache.handler.js` para activarlo. |
 | `0.05` | `m.chat.handler.js` | Añade `m.chat` y sus acciones. Carga metadatos del grupo (caché de 5 min). |
 | `0.10` | `m.bot.handler.js` | Añade `m.bot`. |
 | `0.12` | `m.sender.handler.js` | Añade `m.sender` y sincroniza roles. |
