@@ -58,3 +58,4 @@ Documentados como ⚠️ en las guías; conviene decidir si se arreglan:
 - El campo `134` sobrevive cuando el mensaje va anidado en `deviceSentMessage` (envío a los dispositivos propios).
 - Dos construcciones en paralelo funcionan; un mensaje normal se codifica idéntico antes y después del parche.
 - **No probado:** entrega y renderizado reales en WhatsApp.
+- El builder envía **WebP animados sin reconvertir** (se sube el mismo archivo, `isAnimated: true`). Verificado offline: el tamaño subido coincide con el original cifrado. **No probado en WhatsApp:** cómo se muestra un sticker animado con audio.
