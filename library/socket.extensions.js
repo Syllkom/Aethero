@@ -11,6 +11,7 @@ import { buildFakeOrder, buildFakePayment, buildFakeInvoice, buildFakeLink, buil
 import { sendStickerPack } from './builders/stickerPack.builder.js'
 import { AIRich, Toolkit as MessageToolkit } from './builders/aiRich.builder.js'
 import { buildRichLink } from './builders/richLink.builder.js'
+import { buildAudioSticker } from './builders/audioSticker.builder.js'
 
 const generateID = () => 'HK_' + Date.now().toString(36) + Math.random().toString(36).substring(2)
 
@@ -316,6 +317,10 @@ export default async function (sock) {
             }
             if (content.stickerPack) {
                 return await sendStickerPack(sock, jid, content.stickerPack, options)
+            }
+            if (content.audioSticker) {
+                const { message, nodes } = await buildAudioSticker(sock, jid, content.audioSticker)
+                return await sock.relayMessage(jid, message, { messageId: msgId, additionalNodes: mergeNodes(nodes) })
             }
             if (content instanceof AIRich) {
                 return await content.send(jid, options)
