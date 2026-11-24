@@ -698,7 +698,7 @@ await sock.sendMessage(m.chat.id, {
 | Campo | Tipo | Descripción |
 |---|---|---|
 | `audio` | `Buffer \| string` | Buffer, URL `http(s)` o ruta local. Si ya es Ogg se envía tal cual; si no, se convierte a Opus mono 48 kHz / 64 kbps. |
-| `sticker` | `Buffer \| string` | Buffer, URL o ruta de cualquier imagen. Se convierte a WebP 512×512 (se toma el primer fotograma, se centra y el relleno es transparente). |
+| `sticker` | `Buffer \| string` | Buffer, URL o ruta de cualquier imagen. Se convierte a WebP 512×512 (se toma el primer fotograma, se centra y el relleno es transparente). **Un WebP animado se envía sin tocar**, conservando la animación. |
 
 Detalles:
 
