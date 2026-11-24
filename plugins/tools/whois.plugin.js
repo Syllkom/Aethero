@@ -3,7 +3,7 @@
 export default {
     command: true, usePrefix: true,
     case: ['whois', 'stalk'],
-    category: 'tools', description: 'Muestra la informacion tecnica, roles, estadisticas y foto de perfil de un usuario.',
+    category: 'herramientas', description: 'Muestra la informacion tecnica, roles, estadisticas y foto de perfil de un usuario.',
     usage: ['whois @user', 'whois (citado)'],
     script: async (m, { sock }) => {
         let targetId = m.sender.mentioned[0] || m.quoted?.sender?.id || m.sender.id

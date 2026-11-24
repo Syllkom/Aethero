@@ -4,7 +4,7 @@ import got from 'got'
 export default {
     command: true, usePrefix: true,
     case: ['tr', 'traducir', 'translate'],
-    category: 'tools',
+    category: 'herramientas',
     description: 'Traduce texto a otro idioma usando MyMemory API.',
     usage: ['tr ‹idioma› ‹texto›', 'tr ‹idioma› (citando un mensaje)', 'tr ‹texto› (traduce a ingles por defecto)'],
     script: async (m, { sock }) => {

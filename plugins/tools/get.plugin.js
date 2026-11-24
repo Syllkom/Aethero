@@ -5,7 +5,7 @@ import { fileTypeFromBuffer } from 'file-type'
 export default {
     command: true, usePrefix: true,
     case: ['get', 'fetch'],
-    category: 'tools',
+    category: 'herramientas',
     description: 'Descarga cualquier contenido de una URL y lo envia segun su tipo.',
     usage: ['get ‹url›'],
     script: async (m, { sock }) => {

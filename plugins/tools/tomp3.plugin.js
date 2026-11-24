@@ -5,7 +5,7 @@ import ffmpeg from 'fluent-ffmpeg'
 export default {
     command: true, usePrefix: true,
     case: ['tomp3', 'toaudio'],
-    category: 'tools',
+    category: 'herramientas',
     description: 'Extrae el audio de un video y lo convierte a MP3.',
     script: async (m, { sock }) => {
         if (!m.quoted || !m.quoted.content?.isMedia) return m.reply('Cita un video o audio para extraer el MP3.')
