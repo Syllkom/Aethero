@@ -682,5 +682,33 @@ await sock.sendMessage(m.chat.id, {
 }, { quoted: m.raw })
 ```
 
----
+### 6.17. Sticker con audio (`content.audioSticker`) ⚠️ experimental
+
+Envía un **sticker que lleva un audio incrustado**: una imagen WebP y un audio, cifrados y subidos por separado, referenciados desde un campo protobuf propio (`134`) de `proto.Message`. No requiere `.proto` externo; usa las definiciones de Baileys y ffmpeg.
+
+```javascript
+await sock.sendMessage(m.chat.id, {
+    audioSticker: {
+        audio: bufferOUrlORuta,     // cualquier formato que ffmpeg lea
+        sticker: bufferOUrlORuta    // cualquier imagen
+    }
+})
+```
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `audio` | `Buffer \| string` | Buffer, URL `http(s)` o ruta local. Si ya es Ogg se envía tal cual; si no, se convierte a Opus mono 48 kHz / 64 kbps. |
+| `sticker` | `Buffer \| string` | Buffer, URL o ruta de cualquier imagen. Se convierte a WebP 512×512 (se toma el primer fotograma, se centra y el relleno es transparente). |
+
+Detalles:
+
+- Falta `audio` o `sticker` → `TypeError`. Archivo ilegible, URL con error HTTP o fallo de ffmpeg → `Error` con el motivo.
+- Usa el ffmpeg que resuelve `library/media/ffmpegResolver.js`; cada conversión tiene un límite de 60 s.
+- Los medios cifrados se suben con `sock.waUploadToServer`. El archivo temporal va en `os.tmpdir()` (no en `storage/temp`, que se vacía cada minuto) y se borra siempre.
+- El campo `134` se escribe con un parche **único** sobre `proto.Message.encode` (se instala al primer uso). Solo actúa sobre los mensajes de este builder, así que no altera ningún otro envío ni hay que restaurarlo; es seguro con envíos concurrentes.
+- No admite `quoted`.
+- Devuelve el ID del mensaje, como `relayMessage`.
+- Si quieres preparar el mensaje sin enviarlo: `buildAudioSticker(sock, jid, data)` (exportado desde `library/builders/audioSticker.builder.js`) devuelve `{ message, nodes, info }`.
+
+⚠️ Es un formato no oficial: la codificación está verificada con pruebas offline (ver `AUDIT.md`), pero que se **muestre** como sticker con audio depende de la versión de WhatsApp del destinatario, y enviar protobuf no estándar puede acarrear riesgo para la cuenta. Pruébalo primero con un número secundario.
 

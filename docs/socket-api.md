@@ -16,6 +16,7 @@ Reconoce claves especiales en `content` y las envía con su *builder*. Si no hay
 | `pollSnapshot` | Estadísticas de encuesta. |
 | `richLink` (o `linkPreview`) | Enlace enriquecido. |
 | `stickerPack` | Paquete oficial de stickers. |
+| `audioSticker` | ⚠️ Sticker con audio incrustado (experimental). |
 | `aiRich` o una instancia de `sock.AIRich` | Mensajes estilo Meta AI. |
 
 Detalle de cada builder en [Referencia de builders](builders-reference.md).
