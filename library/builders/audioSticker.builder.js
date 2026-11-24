@@ -117,6 +117,7 @@ async function encryptAndUpload(sock, plain, kind) {
     const file = Buffer.concat([enc, mac])
     const fileEncSha256 = crypto.createHash('sha256').update(file).digest()
 
+    // os.tmpdir() y no storage/temp: el recolector de basura vacía esa carpeta cada 60 s.
     const tmp = path.join(os.tmpdir(), `as-${kind}-${crypto.randomBytes(8).toString('hex')}.enc`)
     await fs.writeFile(tmp, file)
 
@@ -150,8 +151,14 @@ export async function buildAudioSticker(sock, jid, data = {}) {
     const audioBuf = isOgg ? audioInput : await toOpus(audioInput)
     const audioMime = 'audio/ogg; codecs=opus'
 
-    const stickerBuf = await toWebp(await toBuffer(data.sticker, 'sticker'))
-    const webp = parseWebp(stickerBuf)
+    const stickerInput = await toBuffer(data.sticker, 'sticker')
+    let stickerBuf = stickerInput
+    let webp
+    try { webp = parseWebp(stickerInput) } catch { webp = null }
+    if (!webp?.isAnimated) {
+        stickerBuf = await toWebp(stickerInput)
+        webp = parseWebp(stickerBuf)
+    }
 
     const [a, s] = await Promise.all([
         encryptAndUpload(sock, audioBuf, 'audio'),
@@ -202,7 +209,7 @@ export async function buildAudioSticker(sock, jid, data = {}) {
         nodes: [],
         info: {
             audio: { mimetype: audioMime, size: audioBuf.length },
-            sticker: { mimetype: 'image/webp', width: webp.width, height: webp.height }
+            sticker: { mimetype: 'image/webp', width: webp.width, height: webp.height, isAnimated: webp.isAnimated }
         }
     }
 }
