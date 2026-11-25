@@ -243,7 +243,7 @@ Detalles completos en [Advertencias de uso](docs/03-warnings.md).
 
 ## Otras ramas
 
-[`main`](https://github.com/Syllkom/Aethero/tree/main) (experiencia completa) · [`framework`](https://github.com/Syllkom/Aethero/tree/framework) (código base sin plugins) · [`termux`](https://github.com/Syllkom/Aethero/tree/termux) (adaptación para Android)
+[`main`](https://github.com/Syllkom/Aethero/tree/main) (experiencia completa) · [`framework`](https://github.com/Syllkom/Aethero/tree/framework) (código base sin plugins)
 
 ## Créditos y licencia
 
