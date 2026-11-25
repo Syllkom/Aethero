@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="440" viewBox="0 0 1280 440" role="img" aria-label="Aethero Essentials">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#050d0e"/>
+      <stop offset="1" stop-color="#08181a"/>
+    </linearGradient>
+    <linearGradient id="border" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2dd4bf"/>
+      <stop offset="1" stop-color="#155e75"/>
+    </linearGradient>
+    <linearGradient id="title" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#99f6e4"/>
+    </linearGradient>
+    <pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.2" fill="#ffffff" fill-opacity="0.08"/>
+    </pattern>
+  </defs>
+
+  <rect width="1280" height="440" rx="28" fill="url(#bg)"/>
+  <rect width="1280" height="440" rx="28" fill="url(#dots)"/>
+  <rect x="1.5" y="1.5" width="1277" height="437" rx="26.5" fill="none" stroke="url(#border)" stroke-width="3"/>
+
+  <g transform="translate(554,34) scale(0.12)">
+    <g transform="translate(0,1440) scale(0.1,-0.1)" fill="#ffffff" stroke="none">
+<path d="M7033 14129 c-198 -19 -389 -72 -571 -159 -117 -56 -4334 -2657
+-4429 -2732 -208 -164 -377 -460 -461 -808 -71 -292 -66 -27 -70 -3430 -2
+-2069 0 -3111 7 -3205 24 -316 123 -522 334 -693 86 -70 103 -80 617 -382 223
+-130 644 -381 935 -557 292 -175 537 -322 547 -325 9 -4 23 -1 32 5 15 11 16
+337 18 3677 l3 3665 22 78 c50 176 167 334 309 417 32 19 609 377 1280 796
+672 419 1240 772 1264 784 173 88 447 77 657 -27 75 -37 2520 -1518 2692
+-1630 177 -116 224 -186 241 -360 5 -56 10 -641 10 -1379 0 -1367 -2 -1315 46
+-1297 32 11 2338 1455 2352 1471 15 20 17 2116 2 2227 -33 228 -133 483 -270
+685 -149 222 -371 426 -625 576 -81 48 -3760 2275 -3890 2355 -158 96 -375
+180 -566 219 -81 16 -373 44 -399 38 -3 0 -42 -4 -87 -9z"/>
+<path d="M12319 7022 c-2040 -1511 -4144 -3135 -5759 -4446 -1053 -855 -2239
+-1867 -2307 -1969 -85 -127 -55 -208 95 -259 l67 -23 1615 -3 c1059 -2 1642 1
+1692 7 141 19 266 81 435 218 3659 2966 4573 3709 4600 3746 46 62 90 180 103
+277 15 118 10 2832 -6 2837 -6 2 -247 -171 -535 -385z"/>
+    </g>
+  </g>
+
+  <g font-family="Inter, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" text-anchor="middle">
+    <text x="640" y="296" font-size="92" font-weight="700" letter-spacing="-2" fill="url(#title)">Aethero</text>
+
+    <rect x="530" y="316" width="220" height="40" rx="20" fill="#2dd4bf" fill-opacity="0.10" stroke="#2dd4bf" stroke-opacity="0.55"/>
+    <text x="640" y="343" font-size="18" font-weight="600" letter-spacing="5" fill="#5eead4">ESSENTIALS</text>
+
+    <text x="640" y="402" font-size="26" fill="#a3cfc8">Administra grupos, descarga multimedia y controla tu bot.</text>
+  </g>
+</svg>
