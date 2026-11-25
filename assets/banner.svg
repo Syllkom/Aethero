@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="420" viewBox="0 0 1280 420" role="img" aria-label="Aethero: framework modular para bots de WhatsApp">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#07070d"/>
+      <stop offset="1" stop-color="#15112b"/>
+    </linearGradient>
+    <linearGradient id="border" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8b7dff"/>
+      <stop offset="1" stop-color="#3a3470"/>
+    </linearGradient>
+    <linearGradient id="title" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#b9b2ff"/>
+    </linearGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" fill="none" stroke="#ffffff" stroke-opacity="0.04"/>
+    </pattern>
+  </defs>
+
+  <rect width="1280" height="420" rx="28" fill="url(#bg)"/>
+  <rect width="1280" height="420" rx="28" fill="url(#grid)"/>
+  <rect x="1.5" y="1.5" width="1277" height="417" rx="26.5" fill="none" stroke="url(#border)" stroke-width="3"/>
+
+  <g transform="translate(110,60) scale(0.2)">
+    <g transform="translate(0,1440) scale(0.1,-0.1)" fill="#ffffff" stroke="none">
+<path d="M7033 14129 c-198 -19 -389 -72 -571 -159 -117 -56 -4334 -2657
+-4429 -2732 -208 -164 -377 -460 -461 -808 -71 -292 -66 -27 -70 -3430 -2
+-2069 0 -3111 7 -3205 24 -316 123 -522 334 -693 86 -70 103 -80 617 -382 223
+-130 644 -381 935 -557 292 -175 537 -322 547 -325 9 -4 23 -1 32 5 15 11 16
+337 18 3677 l3 3665 22 78 c50 176 167 334 309 417 32 19 609 377 1280 796
+672 419 1240 772 1264 784 173 88 447 77 657 -27 75 -37 2520 -1518 2692
+-1630 177 -116 224 -186 241 -360 5 -56 10 -641 10 -1379 0 -1367 -2 -1315 46
+-1297 32 11 2338 1455 2352 1471 15 20 17 2116 2 2227 -33 228 -133 483 -270
+685 -149 222 -371 426 -625 576 -81 48 -3760 2275 -3890 2355 -158 96 -375
+180 -566 219 -81 16 -373 44 -399 38 -3 0 -42 -4 -87 -9z"/>
+<path d="M12319 7022 c-2040 -1511 -4144 -3135 -5759 -4446 -1053 -855 -2239
+-1867 -2307 -1969 -85 -127 -55 -208 95 -259 l67 -23 1615 -3 c1059 -2 1642 1
+1692 7 141 19 266 81 435 218 3659 2966 4573 3709 4600 3746 46 62 90 180 103
+277 15 118 10 2832 -6 2837 -6 2 -247 -171 -535 -385z"/>
+    </g>
+  </g>
+
+  <g font-family="Inter, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif">
+    <text x="470" y="215" font-size="108" font-weight="700" letter-spacing="-2" fill="url(#title)">Aethero</text>
+    <text x="474" y="268" font-size="30" fill="#c9c6e8">Framework modular para bots de WhatsApp</text>
+
+    <g font-size="20" fill="#e8e6ff">
+      <rect x="474" y="304" width="150" height="40" rx="20" fill="#ffffff" fill-opacity="0.08" stroke="#ffffff" stroke-opacity="0.18"/>
+      <text x="549" y="330" text-anchor="middle">Hot-reload</text>
+      <rect x="638" y="304" width="190" height="40" rx="20" fill="#ffffff" fill-opacity="0.08" stroke="#ffffff" stroke-opacity="0.18"/>
+      <text x="733" y="330" text-anchor="middle">Event-driven</text>
+      <rect x="842" y="304" width="150" height="40" rx="20" fill="#ffffff" fill-opacity="0.08" stroke="#ffffff" stroke-opacity="0.18"/>
+      <text x="917" y="330" text-anchor="middle">Sub-bots</text>
+      <rect x="1006" y="304" width="170" height="40" rx="20" fill="#ffffff" fill-opacity="0.08" stroke="#ffffff" stroke-opacity="0.18"/>
+      <text x="1091" y="330" text-anchor="middle">Baileys</text>
+    </g>
+  </g>
+</svg>
